@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let baseNumStars = 1000;
     const stars = [];
     const shootingStars = [];
+    const astronautTrailParticles = []; // New array for astronaut trail particles
     const nebulaClouds = [];
     // Responsive controls (adjust for small screens / portrait)
     let starSizeScale = 1;
@@ -232,6 +233,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    class AstronautTrailParticle {
+        constructor(x, y, size, color) {
+            this.x = x;
+            this.y = y;
+            this.size = size;
+            this.color = color;
+            this.opacity = 1;
+            this.decayRate = Math.random() * 0.02 + 0.01; // Slower decay for subtlety
+            this.vx = (Math.random() - 0.5) * 0.5; // Slight random movement
+            this.vy = (Math.random() - 0.5) * 0.5;
+        }
+
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.opacity -= this.decayRate;
+            this.size *= 0.98; // Shrink slightly
+        }
+
+        draw(ctx) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fillStyle = this.color.replace('OPACITY', Math.max(0, this.opacity));
+            ctx.fill();
+        }
+
+        isFaded() {
+            return this.opacity <= 0 || this.size <= 0.5;
+        }
+    }
+
     class NebulaCloud {
         constructor() {
             this.x = Math.random() * nebulaCanvas.width;
@@ -300,6 +332,16 @@ document.addEventListener('DOMContentLoaded', () => {
             shootingStars[i].draw(starsCtx);
             if (shootingStars[i].isOffscreen()) shootingStars.splice(i, 1);
         }
+
+        // Update and draw astronaut trail particles
+        for (let i = astronautTrailParticles.length - 1; i >= 0; i--) {
+            astronautTrailParticles[i].update();
+            astronautTrailParticles[i].draw(starsCtx);
+            if (astronautTrailParticles[i].isFaded()) {
+                astronautTrailParticles.splice(i, 1);
+            }
+        }
+
         requestAnimationFrame(animateStars);
     }
 
@@ -341,6 +383,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const astronautSize = astronautSizeCandidate > 0 ? astronautSizeCandidate : 38;
         // Use a larger buffer to avoid clipping when rotated or scaled
         const buffer = astronautSize * 4 + 50;
+
+        // Clear any existing trail particles when a new astronaut launches
+        astronautTrailParticles.length = 0;
  
         // 1. Define random start and end points off-screen
         const startPos = { x: 0, y: 0 };
@@ -397,6 +442,27 @@ document.addEventListener('DOMContentLoaded', () => {
         container.style.willChange = 'transform, opacity';
         container.style.opacity = '1';
         container.classList.add('animate');
+
+        // Start emitting trail particles
+        let trailInterval;
+        const startEmittingTrail = () => {
+            if (trailInterval) clearInterval(trailInterval);
+            trailInterval = setInterval(() => {
+                const rect = astronautEl.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                // Emit multiple particles for a denser trail
+                for (let i = 0; i < 3; i++) {
+                    astronautTrailParticles.push(new AstronautTrailParticle(
+                        centerX,
+                        centerY,
+                        Math.random() * 1.5 + 0.5, // Smaller size for subtlety
+                        'rgba(200, 220, 255, OPACITY)' // Subtle white/blue
+                    ));
+                }
+            }, 50); // Emit particles every 50ms
+        };
+        startEmittingTrail();
  
         // Clear any previous timer/listener to avoid double-scheduling
         if (container._astronautTimer) {
@@ -412,6 +478,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const msDuration = Math.round(duration * 1000);
         const onDone = () => {
             container.classList.remove('animate');
+            // Stop emitting trail particles
+            if (trailInterval) clearInterval(trailInterval);
             // hide it safely
             container.style.opacity = '0';
             container.style.visibility = 'hidden';
