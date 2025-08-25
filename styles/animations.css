@@ -30,3 +30,21 @@
     transform: translateY(0px) rotate(5deg);
   }
 }
+
+@keyframes rocket-squiggle {
+  0% {
+    transform: translateY(0px) translateX(0px) rotate(45deg);
+  }
+  25% {
+    transform: translateY(-5px) translateX(5px) rotate(45deg);
+  }
+  50% {
+    transform: translateY(0px) translateX(0px) rotate(45deg);
+  }
+  75% {
+    transform: translateY(5px) translateX(-5px) rotate(45deg);
+  }
+  100% {
+    transform: translateY(0px) translateX(0px) rotate(45deg);
+  }
+}

@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const starsCanvas = document.getElementById('stars-canvas');
     const starsCtx = starsCanvas.getContext('2d');
     const logoContainer = document.getElementById('logo-container');
-    const astronautContainer = document.getElementById('astronaut-container');
+    const spaceObjectContainer = document.getElementById('space-object-container');
 
     let mouseX = 0;
     let mouseY = 0;
@@ -372,20 +372,44 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(animateNebulas, 100); // Low-frequency loop for background
     animateStars(); // High-frequency loop for foreground
 
-    function launchAstronaut() {
-        const container = astronautContainer;
-        const astronautEl = document.getElementById('astronaut');
+    function launchSpaceObject() {
+        const container = spaceObjectContainer;
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        // Robustly compute astronaut size (try offsetWidth, bounding rect, then fallback)
-        const astronautSizeCandidate = (astronautEl && astronautEl.offsetWidth) ? astronautEl.offsetWidth :
-            (astronautEl ? Math.round(astronautEl.getBoundingClientRect().width) : 38);
-        const astronautSize = astronautSizeCandidate > 0 ? astronautSizeCandidate : 38;
+        
+        // Randomly select a space object
+        const spaceObjects = [
+            { id: 'astronaut', name: 'Astronaut' },
+            { id: 'meteorite', name: 'Meteorite' },
+            { id: 'rocket', name: 'Rocket' },
+            { id: 'satellite', name: 'Satellite' }
+        ];
+        const selectedObject = spaceObjects[Math.floor(Math.random() * spaceObjects.length)];
+        const spaceObjectEl = document.getElementById(selectedObject.id);
+        
+        // Hide all space objects first
+        document.querySelectorAll('.space-object').forEach(el => {
+            el.style.display = 'none';
+        });
+        
+        // Show only the selected space object
+        spaceObjectEl.style.display = 'block';
+        
+        // Force a reflow to ensure the display property is applied before animation
+        void container.offsetWidth;
+        
+        // Robustly compute space object size (try offsetWidth, bounding rect, then fallback)
+        const spaceObjectSizeCandidate = (spaceObjectEl && spaceObjectEl.offsetWidth) ? spaceObjectEl.offsetWidth :
+            (spaceObjectEl ? Math.round(spaceObjectEl.getBoundingClientRect().width) : 38);
+        const spaceObjectSize = spaceObjectSizeCandidate > 0 ? spaceObjectSizeCandidate : 38;
         // Use a larger buffer to avoid clipping when rotated or scaled
-        const buffer = astronautSize * 4 + 50;
+        const buffer = spaceObjectSize * 4 + 50;
 
-        // Clear any existing trail particles when a new astronaut launches
+        // Clear any existing trail particles when a new space object launches
         astronautTrailParticles.length = 0;
+        
+        // Remove any previous rocket-specific class
+        container.classList.remove('rocket');
  
         // 1. Define random start and end points off-screen
         const startPos = { x: 0, y: 0 };
@@ -421,8 +445,23 @@ document.addEventListener('DOMContentLoaded', () => {
  
         // 2. Set random duration and rotation
         const duration = Math.random() * 10 + 10; // 10-20 seconds
-        const startRotation = Math.random() * 360;
-        const endRotation = startRotation + (Math.random() > 0.5 ? 1 : -1) * 360; // Rotate 360 deg clockwise or counter-clockwise
+        let startRotation, endRotation;
+        
+        if (selectedObject.id === 'rocket') {
+            // Rocket should always be aligned with nose pointing top-right (45 degrees)
+            startRotation = 45;
+            endRotation = 45;
+            // Add rocket-specific class for squiggle animation
+            container.classList.add('rocket');
+            // Ensure the rocket element itself maintains the 45-degree rotation
+            spaceObjectEl.style.transform = 'rotate(45deg)';
+        } else {
+            // Other objects should rotate like the astronaut
+            startRotation = Math.random() * 360;
+            endRotation = startRotation + (Math.random() > 0.5 ? 1 : -1) * 360; // Rotate 360 deg clockwise or counter-clockwise
+            // Reset transform for non-rocket objects
+            spaceObjectEl.style.transform = '';
+        }
  
         // 3. Apply CSS variables
         container.style.setProperty('--start-x', `${startPos.x}px`);
@@ -434,7 +473,7 @@ document.addEventListener('DOMContentLoaded', () => {
         container.style.setProperty('--end-rotate', `${endRotation}deg`);
  
         // Debugging log (can be removed later)
-        console.log('launchAstronaut()', { startPos, endPos, duration, astronautSize, buffer });
+        console.log('launchSpaceObject()', { selectedObject: selectedObject.name, startPos, endPos, duration, spaceObjectSize, buffer });
  
         // 4. Ensure visibility and GPU-accelerate transform
         container.style.visibility = 'visible';
@@ -442,13 +481,16 @@ document.addEventListener('DOMContentLoaded', () => {
         container.style.willChange = 'transform, opacity';
         container.style.opacity = '1';
         container.classList.add('animate');
+        
+        // Ensure the selected space object remains visible after animation starts
+        spaceObjectEl.style.display = 'block';
 
         // Start emitting trail particles
         let trailInterval;
         const startEmittingTrail = () => {
             if (trailInterval) clearInterval(trailInterval);
             trailInterval = setInterval(() => {
-                const rect = astronautEl.getBoundingClientRect();
+                const rect = spaceObjectEl.getBoundingClientRect();
                 const centerX = rect.left + rect.width / 2;
                 const centerY = rect.top + rect.height / 2;
                 // Emit multiple particles for a denser trail
@@ -484,7 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
             container.style.opacity = '0';
             container.style.visibility = 'hidden';
             // Schedule the next launch after a random delay
-            setTimeout(launchAstronaut, Math.random() * 15000 + 30000); // 30-45 seconds delay
+            setTimeout(launchSpaceObject, Math.random() * 8000 + 2000); // 2-10 seconds delay
         };
         // Attach both a timer and an animationend listener as a robust fallback
         container._astronautTimer = setTimeout(onDone, msDuration + 300);
@@ -500,5 +542,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Initial launch after a short delay
-    setTimeout(launchAstronaut, 5000);
+    setTimeout(launchSpaceObject, 5000);
 });

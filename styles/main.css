@@ -47,7 +47,7 @@ canvas {
         animation: pulse-glow 3s infinite;
 }
 
-#astronaut-container {
+#space-object-container {
     position: fixed;
     z-index: 0;
     opacity: 0;
@@ -56,14 +56,24 @@ canvas {
     transform: translate(var(--start-x, -200px), var(--start-y, -200px)) rotate(var(--start-rotate, 0deg));
 }
 
-#astronaut {
+.space-object {
     width: 38px; /* Adjust size as needed */
-    animation: float-astronaut var(--duration, 20s) linear;
     transform-origin: center;
+    position: absolute;
+    display: none; /* Hide all by default, only show the selected one */
 }
 
-#astronaut-container.animate {
+#rocket {
+    /* Rocket should point top-right by default */
+    transform: rotate(45deg);
+}
+
+#space-object-container.animate {
     opacity: 1;
     animation: move-astronaut var(--duration, 20s) linear forwards;
+}
+
+#space-object-container.animate.rocket #rocket {
+    animation: rocket-squiggle 2s ease-in-out infinite;
 }
 
