@@ -73,7 +73,6 @@ document.addEventListener('DOMContentLoaded', () => {
             _prevStarCountScale = starCountScale;
         }
     }
-    updateResponsiveSettings();
 
     const starColors = {
         whiteBlue: 'rgba(200, 200, 255, OPACITY)',
@@ -308,9 +307,6 @@ document.addEventListener('DOMContentLoaded', () => {
             stars.length = desired;
         }
     }
-    // initialize stars according to responsive scale
-    updateResponsiveSettings();
-    adjustStarCount();
 
     function animateNebulas() {
         nebulaCtx.clearRect(0, 0, nebulaCanvas.width, nebulaCanvas.height);
@@ -369,6 +365,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // initialize stars according to responsive scale (moved here after Star class is defined)
+    updateResponsiveSettings();
+    adjustStarCount();
+    
     setInterval(animateNebulas, 100); // Low-frequency loop for background
     animateStars(); // High-frequency loop for foreground
 
@@ -472,8 +472,6 @@ document.addEventListener('DOMContentLoaded', () => {
         container.style.setProperty('--start-rotate', `${startRotation}deg`);
         container.style.setProperty('--end-rotate', `${endRotation}deg`);
  
-        // Debugging log (can be removed later)
-        console.log('launchSpaceObject()', { selectedObject: selectedObject.name, startPos, endPos, duration, spaceObjectSize, buffer });
  
         // 4. Ensure visibility and GPU-accelerate transform
         container.style.visibility = 'visible';
@@ -543,4 +541,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initial launch after a short delay
     setTimeout(launchSpaceObject, 5000);
+    
 });
