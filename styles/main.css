@@ -64,8 +64,7 @@ canvas {
 }
 
 #rocket {
-    /* Rocket should point top-right by default */
-    transform: rotate(45deg);
+    /* Rocket's rotation is now handled by the container */
 }
 
 #space-object-container.animate {

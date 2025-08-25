@@ -448,13 +448,14 @@ document.addEventListener('DOMContentLoaded', () => {
         let startRotation, endRotation;
         
         if (selectedObject.id === 'rocket') {
-            // Rocket should always be aligned with nose pointing top-right (45 degrees)
-            startRotation = 45;
-            endRotation = 45;
+            // Rocket's nose should point in the direction of travel.
+            // Image points up, so we calculate the angle and add 90 degrees.
+            const angle = Math.atan2(endPos.y - startPos.y, endPos.x - startPos.x) * (180 / Math.PI);
+            const rotation = angle + 90;
+            startRotation = rotation;
+            endRotation = rotation;
             // Add rocket-specific class for squiggle animation
             container.classList.add('rocket');
-            // Ensure the rocket element itself maintains the 45-degree rotation
-            spaceObjectEl.style.transform = 'rotate(45deg)';
         } else {
             // Other objects should rotate like the astronaut
             startRotation = Math.random() * 360;
