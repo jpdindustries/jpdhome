@@ -21,7 +21,14 @@ document.addEventListener('DOMContentLoaded', () => {
         starsCanvas.height = height;
     }
     // Keep canvas sizing and responsive settings in sync
-    window.addEventListener('resize', () => { resizeCanvases(); updateResponsiveSettings(); });
+    window.addEventListener(
+        'resize',
+        debounce(() => {
+            resizeCanvases();
+            updateResponsiveSettings();
+            recreateElements();
+        }, 250)
+    );
     resizeCanvases();
 
     let baseNumStars = 1000;
@@ -296,15 +303,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    for (let i = 0; i < 4; i++) nebulaClouds.push(new NebulaCloud());
+    function recreateElements() {
+        nebulaClouds.length = 0;
+        for (let i = 0; i < 4; i++) nebulaClouds.push(new NebulaCloud());
+        adjustStarCount();
+    }
+    // Fire up the simulation
+    recreateElements();
     // Adjust star count to match current starCountScale
     function adjustStarCount() {
         const desired = Math.round(baseNumStars * starCountScale);
-        if (desired > stars.length) {
-            const toAdd = desired - stars.length;
-            for (let i = 0; i < toAdd; i++) stars.push(new Star());
-        } else if (desired < stars.length) {
-            stars.length = desired;
+        stars.length = 0; // Clear the array
+        for (let i = 0; i < desired; i++) {
+            stars.push(new Star());
         }
     }
 
@@ -542,5 +553,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initial launch after a short delay
     setTimeout(launchSpaceObject, 5000);
-    
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
 });
