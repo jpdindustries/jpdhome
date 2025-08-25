@@ -1,9 +1,11 @@
 :root {
   --primary-red: #FF0000;
-      --red-glow: 0 0 10px rgba(255, 255, 255, 0.3), 0 0 20px rgba(255, 255, 255, 0.2);
+  --red-glow: 0 0 15px rgba(255, 100, 100, 0.7), 0 0 25px rgba(255, 0, 0, 0.5);
   --red-dim: #660000;
   --red-dark: #330000;
   --background-color: #16161D;
+  --logo-width: 300px;
+  --space-object-width: 38px;
 }
 
 body {
@@ -23,7 +25,7 @@ canvas {
     height: 100%;
 }
 
-#nebula-canvas {
+#nebula-canvas, #stars-canvas {
     z-index: -2;
 }
 
@@ -41,10 +43,10 @@ canvas {
 }
 
 #logo {
-    width: 300px; /* Adjust as needed */
+    width: var(--logo-width);
     max-width: 80vw;
     filter: drop-shadow(var(--red-glow));
-        animation: pulse-glow 3s infinite;
+    animation: pulse-glow 3s infinite;
 }
 
 #space-object-container {
@@ -57,10 +59,10 @@ canvas {
 }
 
 .space-object {
-    width: 38px; /* Adjust size as needed */
+    width: var(--space-object-width);
     transform-origin: center;
     position: absolute;
-    display: none; /* Hide all by default, only show the selected one */
+    display: none;
 }
 
 #rocket {
