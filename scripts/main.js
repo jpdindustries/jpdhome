@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Lissajous curve parameters for subtle automatic parallax
     let lissajousMagnitude = 1000; // Maximum movement in pixels
-    let lissajousSpeed = 0.000025; // Speed of the motion
+    let lissajousSpeed = 0.000035; // Speed of the motion
     let lissajousA = 3; // Frequency parameter for X axis
     let lissajousB = 4; // Frequency parameter for Y axis
     let lissajousDelta = Math.PI / 2; // Phase shift
@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     );
     resizeCanvases();
 
-    let baseNumStars = 1000;
+    let baseNumStars = 1337;
     const stars = [];
     const shootingStars = [];
     const astronautTrailParticles = []; // New array for astronaut trail particles
@@ -57,14 +57,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const h = window.innerHeight;
         const isPortrait = h > w;
         // Mobile / narrow portrait: fewer, smaller stars but user requested 4× density (no cap)
-        if (w <= 480 || (isPortrait && w < 900)) {
+        if (w <= 480 || (isPortrait && w < 1200)) {
             starSizeScale = 0.6;
             // increase small-screen density 4× relative to the previous small setting
             starCountScale = 0.3; // decrease small-screen density by half by a third
             shootingFreq = 0.005;
             // reduce parallax so the logo stays visually centered on phones
             logoMovementRatio = 0.02;
-        } else if (w <= 900) {
+        } else if (w <= 1200) {
             // Small laptops / large phones: slightly reduced
             starSizeScale = 0.8;
             starCountScale = 0.4;
@@ -133,8 +133,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     class Star {
         constructor() {
-            this.x = Math.random() * starsCanvas.width;
-            this.y = Math.random() * starsCanvas.height;
+            const buffer = 0.2; // 20% buffer on each side
+            this.x = (Math.random() * (1 + 2 * buffer) - buffer) * starsCanvas.width;
+            this.y = (Math.random() * (1 + 2 * buffer) - buffer) * starsCanvas.height;
             this.z = Math.random() * starsCanvas.width;
             // scale star sizes responsively (starSizeScale set by updateResponsiveSettings)
             this.size = (Math.random() * 2 + 1) * starSizeScale;
@@ -222,8 +223,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     class ShootingStar {
         constructor() {
-            this.x = Math.random() * starsCanvas.width * 1.5;
-            this.y = Math.random() * starsCanvas.height * 0.5;
+            // Start shooting stars farther off-screen for a better effect with parallax
+            const startX = Math.random() * starsCanvas.width * 1.5 - (starsCanvas.width * 0.25);
+            const startY = Math.random() * starsCanvas.height * 0.5;
+            this.x = startX;
+            this.y = startY;
             this.len = Math.random() * 120 + 30;
             this.speed = Math.random() * 8 + 7;
             this.angle = -Math.PI / 4;
