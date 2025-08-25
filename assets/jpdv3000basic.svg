@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="400"
+   height="400"
+   viewBox="0 0 400.00001 400"
+   version="1.1"
+   id="svg1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1">
+    <rect
+       x="217.38103"
+       y="522.53094"
+       width="355.47775"
+       height="82.658592"
+       id="rect6-3-4" />
+  </defs>
+  <g
+     id="layer5"
+     transform="translate(-183.64829,-463.70255)">
+    <text
+       xml:space="preserve"
+       id="text6-5-2"
+       style="font-size:29.3333px;font-family:'Dune Rise';-inkscape-font-specification:'Dune Rise';text-align:center;letter-spacing:1.65px;white-space:pre;shape-inside:url(#rect6-3-4);display:inline;fill:#ffffff;stroke:#ff0000;stroke-width:2"
+       transform="translate(-11.564625,199.7885)"><tspan
+         x="236.80462"
+         y="549.58728"
+         id="tspan4"><tspan
+           dx="0 0 0 0 0 -1.65 1.6499878 0 0 -1.65"
+           style="font-family:abnes;-inkscape-font-specification:abnes;stroke:none"
+           id="tspan1">INDUSTRIES</tspan></tspan></text>
+    <path
+       style="font-size:192px;font-family:Nasalization;-inkscape-font-specification:Nasalization;text-align:center;text-anchor:middle;white-space:pre;fill:#ff0000;stroke:#ff0000;stroke-width:0"
+       d="m 436.23259,578.00001 22.18966,22.65805 v 84.27341 l -22.18952,22.66854 h 45.69587 c 38.01599,0 58.368,-21.12 58.368,-64.704 0,-43.776 -20.544,-64.896 -58.368,-64.896 z m 22.18966,22.65805 23.50635,-0.002 c 25.152,-0.002 35.71199,12.48 35.71199,42.048 0,29.76 -10.55999,42.24 -35.71199,42.24 l -23.50635,-0.0125 z"
+       id="text1-6-6"
+       aria-label="JPD" />
+    <path
+       style="font-size:192px;font-family:Nasalization;-inkscape-font-specification:Nasalization;text-align:center;text-anchor:middle;white-space:pre;fill:#ff0000;stroke:#ff0000;stroke-width:0"
+       d="m 296.1204,600.65806 v 62.01395 c 0,12.48 -6.144,22.272 -26.496,22.272 H 249.758 L 227,707.60001 h 43.9684 c 34.368,0 48.00012,-18.816 48,-44.736 l -3.9e-4,-84.864 z m 34.60803,-22.65805 22.81309,22.65805 44.57891,-0.002 c 12.288,-5.7e-4 17.856,7.872 17.856,17.28 0,9.024 -5.184,17.856 -18.048,17.856 h -46.656 c -14.208,0 -20.352,5.952 -20.352,20.544 v 51.264 l 22.62109,-22.66859 0.0349,-24.17941 c 0.003,-2.304 1.152,-3.264 3.264,-3.264 h 40.32 c 30.336,0 41.664,-21.12 41.664,-40.704 0,-20.736 -12.48,-38.784 -41.664,-38.784 z m 127.69383,22.65805 v 84.27341 z"
+       id="text1-89"
+       aria-label="JPD" />
+  </g>
+</svg>
