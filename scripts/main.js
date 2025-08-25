@@ -13,6 +13,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let logoMovementRatio = 0.08;
     let mouseOutsideTimer = null;
     let isMouseOutside = false;
+    
+    // Lissajous curve parameters for subtle automatic parallax
+    let lissajousMagnitude = 1000; // Maximum movement in pixels
+    let lissajousSpeed = 0.000025; // Speed of the motion
+    let lissajousA = 3; // Frequency parameter for X axis
+    let lissajousB = 4; // Frequency parameter for Y axis
+    let lissajousDelta = Math.PI / 2; // Phase shift
 
     function resizeCanvases() {
         const width = window.innerWidth;
@@ -60,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (w <= 900) {
             // Small laptops / large phones: slightly reduced
             starSizeScale = 0.8;
-            starCountScale = 0.6;
+            starCountScale = 0.4;
             shootingFreq = 0.008;
             logoMovementRatio = 0.04;
         } else {
@@ -115,6 +122,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const [r, g, b] = parts.map(Number);
         const brighten = (val) => Math.min(255, val + 70);
         return `rgba(${brighten(r)}, ${brighten(g)}, ${brighten(b)}, ${targetAlpha})`;
+    }
+    
+    // Calculate Lissajous curve position for subtle automatic parallax
+    function calculateLissajousPosition(time) {
+        const x = lissajousMagnitude * Math.sin(lissajousA * time * lissajousSpeed + lissajousDelta);
+        const y = lissajousMagnitude * Math.sin(lissajousB * time * lissajousSpeed);
+        return { x, y };
     }
 
     class Star {
@@ -333,8 +347,16 @@ document.addEventListener('DOMContentLoaded', () => {
         mouseX += (targetMouseX - mouseX) * 0.05;
         mouseY += (targetMouseY - mouseY) * 0.05;
         logoContainer.style.transform = `translate(calc(-50% + ${-mouseX * logoMovementRatio}px), calc(-50% + ${-mouseY * logoMovementRatio}px))`;
+        
+        // Calculate Lissajous position for subtle automatic parallax
+        const lissajousPos = calculateLissajousPosition(Date.now());
+        
+        // Combine mouse parallax with Lissajous motion for stars (but not for logo)
+        const combinedMouseX = mouseX + lissajousPos.x;
+        const combinedMouseY = mouseY + lissajousPos.y;
+        
         starsCtx.clearRect(0, 0, starsCanvas.width, starsCanvas.height);
-        stars.forEach(star => star.draw(starsCtx, mouseX, mouseY));
+        stars.forEach(star => star.draw(starsCtx, combinedMouseX, combinedMouseY));
         if (Math.random() < shootingFreq) shootingStars.push(new ShootingStar());
         for (let i = shootingStars.length - 1; i >= 0; i--) {
             shootingStars[i].update();
