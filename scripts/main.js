@@ -423,22 +423,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    function handleOrientation(event) {
-        const y = event.beta, x = event.gamma;
-        if (x === null || y === null) return;
-        const clampedX = Math.max(-45, Math.min(45, x));
-        const clampedY = Math.max(-45, Math.min(45, y));
-        targetMouseX = (clampedX / 45) * (window.innerWidth / 4);
-        targetMouseY = (clampedY / 45) * (window.innerHeight / 4);
-    }
-
-    if (window.DeviceOrientationEvent && 'ontouchstart' in window) {
-        DeviceOrientationEvent.requestPermission?.().then(permissionState => {
-            if (permissionState === 'granted') window.addEventListener('deviceorientation', handleOrientation);
-        }).catch(() => {
-            if (!('requestPermission' in DeviceOrientationEvent)) window.addEventListener('deviceorientation', handleOrientation);
-        });
-    }
 
     // initialize stars according to responsive scale (moved here after Star class is defined)
     updateResponsiveSettings();
