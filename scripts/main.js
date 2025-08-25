@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const starsCanvas = document.getElementById('stars-canvas');
     const starsCtx = starsCanvas.getContext('2d');
     const logoContainer = document.getElementById('logo-container');
+    const astronautContainer = document.getElementById('astronaut-container');
 
     let mouseX = 0;
     let mouseY = 0;
@@ -269,4 +270,72 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setInterval(animateNebulas, 100); // Low-frequency loop for background
     animateStars(); // High-frequency loop for foreground
+
+    function launchAstronaut() {
+        const container = astronautContainer;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const astronautSize = 38; // Must match CSS
+
+        // 1. Define random start and end points off-screen
+        const startPos = { x: 0, y: 0 };
+        const endPos = { x: 0, y: 0 };
+        const edge = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
+
+        switch (edge) {
+            case 0: // Start top
+                startPos.x = Math.random() * vw;
+                startPos.y = -astronautSize;
+                endPos.x = Math.random() * vw;
+                endPos.y = vh + astronautSize;
+                break;
+            case 1: // Start right
+                startPos.x = vw + astronautSize;
+                startPos.y = Math.random() * vh;
+                endPos.x = -astronautSize;
+                endPos.y = Math.random() * vh;
+                break;
+            case 2: // Start bottom
+                startPos.x = Math.random() * vw;
+                startPos.y = vh + astronautSize;
+                endPos.x = Math.random() * vw;
+                endPos.y = -astronautSize;
+                break;
+            case 3: // Start left
+                startPos.x = -astronautSize;
+                startPos.y = Math.random() * vh;
+                endPos.x = vw + astronautSize;
+                endPos.y = Math.random() * vh;
+                break;
+        }
+
+        // 2. Set random duration and rotation
+        const duration = Math.random() * 10 + 10; // 10-20 seconds
+        const startRotation = Math.random() * 360;
+        const endRotation = startRotation + (Math.random() > 0.5 ? 1 : -1) * 360; // Rotate 360 deg clockwise or counter-clockwise
+
+        // 3. Apply CSS variables
+        container.style.setProperty('--start-x', `${startPos.x}px`);
+        container.style.setProperty('--start-y', `${startPos.y}px`);
+        container.style.setProperty('--end-x', `${endPos.x}px`);
+        container.style.setProperty('--end-y', `${endPos.y}px`);
+        container.style.setProperty('--duration', `${duration}s`);
+        container.style.setProperty('--start-rotate', `${startRotation}deg`);
+        container.style.setProperty('--end-rotate', `${endRotation}deg`);
+
+        // 4. Trigger animation
+        container.classList.add('animate');
+
+        // 5. Listen for animation end to reset
+        const onAnimationEnd = () => {
+            container.classList.remove('animate');
+            container.removeEventListener('animationend', onAnimationEnd);
+            // Schedule the next launch after a random delay
+            setTimeout(launchAstronaut, Math.random() * 15000 + 10000); // 10-25 seconds delay
+        };
+        container.addEventListener('animationend', onAnimationEnd);
+    }
+
+    // Initial launch after a short delay
+    setTimeout(launchAstronaut, 5000);
 });

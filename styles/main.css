@@ -47,3 +47,23 @@ canvas {
         animation: pulse-glow 3s infinite;
 }
 
+#astronaut-container {
+    position: fixed;
+    z-index: 0;
+    opacity: 0;
+    pointer-events: none;
+    /* Animation properties will be set by JS */
+    transform: translate(var(--start-x, -200px), var(--start-y, -200px)) rotate(var(--start-rotate, 0deg));
+}
+
+#astronaut {
+    width: 38px; /* Adjust size as needed */
+    animation: float-astronaut var(--duration, 20s) linear;
+    transform-origin: center;
+}
+
+#astronaut-container.animate {
+    opacity: 1;
+    animation: move-astronaut var(--duration, 20s) linear forwards;
+}
+
