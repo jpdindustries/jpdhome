@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (w <= 480 || (isPortrait && w < 900)) {
             starSizeScale = 0.6;
             // increase small-screen density 4× relative to the previous small setting
-            starCountScale = 0.35 * 4; // 1.4 -> denser than desktop
+            starCountScale = 0.35 * (8/3); // decrease small-screen density by a third
             shootingFreq = 0.005;
             // reduce parallax so the logo stays visually centered on phones
             logoMovementRatio = 0.02;
