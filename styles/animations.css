@@ -3,7 +3,7 @@
         filter: drop-shadow(var(--red-glow));
     }
     50% {
-        filter: drop-shadow(0 0 30px rgba(0, 0, 0, 0.7));
+        filter: drop-shadow(0 0 30px var(--red-dim));
     }
     100% {
         filter: drop-shadow(var(--red-glow));

@@ -6,20 +6,52 @@ document.addEventListener('DOMContentLoaded', () => {
     const logoContainer = document.getElementById('logo-container');
     const spaceObjectContainer = document.getElementById('space-object-container');
 
-    let mouseX = 0;
-    let mouseY = 0;
-    let targetMouseX = 0;
-    let targetMouseY = 0;
-    let logoMovementRatio = 0.08;
-    let mouseOutsideTimer = null;
-    let isMouseOutside = false;
-    
-    // Lissajous curve parameters for subtle automatic parallax
-    let lissajousMagnitude = 1000; // Maximum movement in pixels
-    let lissajousSpeed = 0.000035; // Speed of the motion
-    let lissajousA = 3; // Frequency parameter for X axis
-    let lissajousB = 4; // Frequency parameter for Y axis
-    let lissajousDelta = Math.PI / 2; // Phase shift
+    const config = {
+        baseNumStars: 1337,
+        logoMovementRatio: 0.08,
+        lissajous: {
+            magnitude: 1000,
+            speed: 0.000035,
+            a: 3,
+            b: 4,
+            delta: Math.PI / 2,
+        },
+        starColors: {
+            whiteBlue: 'rgba(200, 200, 255, OPACITY)',
+            yellowWhite: 'rgba(255, 255, 200, OPACITY)',
+            redTinted: 'rgba(255, 180, 180, OPACITY)'
+        },
+        shootingStarColors: [
+            { start: 'rgba(255, 100, 100, OPACITY)', end: 'rgba(255, 0, 0, 0)' },
+            { start: 'rgba(200, 220, 255, OPACITY)', end: 'rgba(200, 220, 255, 0)' },
+            { start: 'rgba(255, 255, 200, OPACITY)', end: 'rgba(255, 255, 0, 0)' }
+        ],
+        spaceObjects: [
+            { id: 'astronaut', name: 'Astronaut' },
+            { id: 'meteorite', name: 'Meteorite' },
+            { id: 'rocket', name: 'Rocket' },
+            { id: 'satellite', name: 'Satellite' }
+        ]
+    };
+
+    const state = {
+        mouseX: 0,
+        mouseY: 0,
+        targetMouseX: 0,
+        targetMouseY: 0,
+        logoMovementRatio: config.logoMovementRatio,
+        mouseOutsideTimer: null,
+        isMouseOutside: false,
+        stars: [],
+        shootingStars: [],
+        astronautTrailParticles: [],
+        nebulaClouds: [],
+        starSizeScale: 1,
+        starCountScale: 1,
+        shootingFreq: 0.015,
+        _prevStarSizeScale: 1,
+        _prevStarCountScale: 1,
+    };
 
     function resizeCanvases() {
         const width = window.innerWidth;
@@ -29,91 +61,65 @@ document.addEventListener('DOMContentLoaded', () => {
         starsCanvas.width = width;
         starsCanvas.height = height;
     }
-    // Keep canvas sizing and responsive settings in sync
-    window.addEventListener(
-        'resize',
-        debounce(() => {
-            resizeCanvases();
-            updateResponsiveSettings();
-            recreateElements();
-        }, 250)
-    );
-    resizeCanvases();
-
-    let baseNumStars = 1337;
-    const stars = [];
-    const shootingStars = [];
-    const astronautTrailParticles = []; // New array for astronaut trail particles
-    const nebulaClouds = [];
-    // Responsive controls (adjust for small screens / portrait)
-    let starSizeScale = 1;
-    let starCountScale = 1;
-    let shootingFreq = 0.015;
-    // keep previous values so we can detect changes and adjust existing stars
-    let _prevStarSizeScale = starSizeScale;
-    let _prevStarCountScale = starCountScale;
+    
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+    
     function updateResponsiveSettings() {
         const w = window.innerWidth;
         const h = window.innerHeight;
         const isPortrait = h > w;
-        // Mobile / narrow portrait: fewer, smaller stars but user requested 4× density (no cap)
+
         if (w <= 480 || (isPortrait && w < 1200)) {
-            starSizeScale = 0.6;
-            // increase small-screen density 4× relative to the previous small setting
-            starCountScale = 0.3; // decrease small-screen density by half by a third
-            shootingFreq = 0.005;
-            // reduce parallax so the logo stays visually centered on phones
-            logoMovementRatio = 0.02;
+            state.starSizeScale = 0.6;
+            state.starCountScale = 0.3;
+            state.shootingFreq = 0.005;
+            state.logoMovementRatio = 0.02;
         } else if (w <= 1200) {
-            // Small laptops / large phones: slightly reduced
-            starSizeScale = 0.8;
-            starCountScale = 0.4;
-            shootingFreq = 0.008;
-            logoMovementRatio = 0.04;
+            state.starSizeScale = 0.8;
+            state.starCountScale = 0.4;
+            state.shootingFreq = 0.008;
+            state.logoMovementRatio = 0.04;
         } else {
-            // Desktop / large displays: original settings
-            starSizeScale = 1;
-            starCountScale = 1;
-            shootingFreq = 0.015;
-            logoMovementRatio = 0.08;
+            state.starSizeScale = 1;
+            state.starCountScale = 1;
+            state.shootingFreq = 0.015;
+            state.logoMovementRatio = config.logoMovementRatio;
         }
-        // If the size scale changed, adjust existing star sizes proportionally
-        if (starSizeScale !== _prevStarSizeScale && stars.length > 0) {
-            const ratio = starSizeScale / (_prevStarSizeScale || 1);
-            stars.forEach(s => { s.size = Math.max(0.2, s.size * ratio); });
-            _prevStarSizeScale = starSizeScale;
+
+        if (state.starSizeScale !== state._prevStarSizeScale && state.stars.length > 0) {
+            const ratio = state.starSizeScale / (state._prevStarSizeScale || 1);
+            state.stars.forEach(s => { s.size = Math.max(0.2, s.size * ratio); });
+            state._prevStarSizeScale = state.starSizeScale;
         }
-        // If the count scale changed, add/remove stars to match desired density
-        if (starCountScale !== _prevStarCountScale) {
+
+        if (state.starCountScale !== state._prevStarCountScale) {
             adjustStarCount();
-            _prevStarCountScale = starCountScale;
+            state._prevStarCountScale = state.starCountScale;
         }
     }
 
-    const starColors = {
-        whiteBlue: 'rgba(200, 200, 255, OPACITY)',
-        yellowWhite: 'rgba(255, 255, 200, OPACITY)',
-        redTinted: 'rgba(255, 180, 180, OPACITY)'
-    };
-
-    const shootingStarColors = [
-        { start: 'rgba(255, 100, 100, OPACITY)', end: 'rgba(255, 0, 0, 0)' }, // Red
-        { start: 'rgba(200, 220, 255, OPACITY)', end: 'rgba(200, 220, 255, 0)' }, // White/Blue
-        { start: 'rgba(255, 255, 200, OPACITY)', end: 'rgba(255, 255, 0, 0)' }  // Yellow/Gold
-    ];
-
     function getRandomColor() {
         const rand = Math.random();
-        if (rand < 0.7) return starColors.whiteBlue;
-        if (rand < 0.9) return starColors.yellowWhite;
-        return starColors.redTinted;
+        if (rand < 0.7) return config.starColors.whiteBlue;
+        if (rand < 0.9) return config.starColors.yellowWhite;
+        return config.starColors.redTinted;
     }
 
     function getStarMovementRatio(star) {
         const depth = star.z / starsCanvas.width;
-        if (depth < 0.33) return 0.060; // Near
-        if (depth < 0.66) return 0.040; // Mid
-        return 0.020; // Far
+        if (depth < 0.33) return 0.060;
+        if (depth < 0.66) return 0.040;
+        return 0.020;
     }
 
     function brightenRgba(rgbaStr, targetAlpha) {
@@ -123,28 +129,27 @@ document.addEventListener('DOMContentLoaded', () => {
         const brighten = (val) => Math.min(255, val + 70);
         return `rgba(${brighten(r)}, ${brighten(g)}, ${brighten(b)}, ${targetAlpha})`;
     }
-    
-    // Calculate Lissajous curve position for subtle automatic parallax
+
     function calculateLissajousPosition(time) {
-        const x = lissajousMagnitude * Math.sin(lissajousA * time * lissajousSpeed + lissajousDelta);
-        const y = lissajousMagnitude * Math.sin(lissajousB * time * lissajousSpeed);
+        const { magnitude, speed, a, b, delta } = config.lissajous;
+        const x = magnitude * Math.sin(a * time * speed + delta);
+        const y = magnitude * Math.sin(b * time * speed);
         return { x, y };
     }
 
     class Star {
         constructor() {
-            const buffer = 0.2; // 20% buffer on each side
+            const buffer = 0.2;
             this.x = (Math.random() * (1 + 2 * buffer) - buffer) * starsCanvas.width;
             this.y = (Math.random() * (1 + 2 * buffer) - buffer) * starsCanvas.height;
             this.z = Math.random() * starsCanvas.width;
-            // scale star sizes responsively (starSizeScale set by updateResponsiveSettings)
-            this.size = (Math.random() * 2 + 1) * starSizeScale;
+            this.size = (Math.random() * 2 + 1) * state.starSizeScale;
             this.baseOpacity = Math.random() * 0.5 + 0.3;
             this.opacity = this.baseOpacity;
             this.isRedGiant = Math.random() > 0.98;
             if (this.isRedGiant) {
                 this.color = 'rgba(255, 100, 100, OPACITY)';
-                this.size = (Math.random() * 2 + 2) * starSizeScale;
+                this.size = (Math.random() * 2 + 2) * state.starSizeScale;
                 this.pulseDirection = 1;
                 this.pulseSpeed = Math.random() * 0.02;
             } else {
@@ -172,36 +177,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 this.shineProgress++;
                 this.shineAngle += 0.005;
                 const sineProgress = Math.sin((this.shineProgress / this.shineDuration) * Math.PI);
-                
-                const shineAlpha1 = sineProgress * 0.6; // Alpha for big cross
-                const shineAlpha2 = sineProgress * 0.4; // Alpha for small cross
 
-                const brighterColorRgba1 = brightenRgba(this.color, shineAlpha1);
-                const brighterColorRgba2 = brightenRgba(this.color, shineAlpha2);
+                const drawShine = (alpha, length, angleOffset) => {
+                    ctx.strokeStyle = brightenRgba(this.color, sineProgress * alpha);
+                    const crossLength = this.size * 5 * sineProgress * length;
+                    for (let i = 0; i < 4; i++) {
+                        ctx.beginPath();
+                        const angle = (i / 4) * Math.PI * 2 + angleOffset + this.shineAngle;
+                        ctx.moveTo(parallaxX, parallaxY);
+                        ctx.lineTo(parallaxX + Math.cos(angle) * crossLength, parallaxY + Math.sin(angle) * crossLength);
+                        ctx.stroke();
+                    }
+                };
 
                 ctx.lineWidth = 1.5;
-
-                // Draw first, larger cross (X)
-                ctx.strokeStyle = brighterColorRgba1;
-                const crossLength1 = this.size * 5 * sineProgress;
-                for (let i = 0; i < 4; i++) {
-                    ctx.beginPath();
-                    const angle = (i / 4) * Math.PI * 2 + (Math.PI / 4) + this.shineAngle;
-                    ctx.moveTo(parallaxX, parallaxY);
-                    ctx.lineTo(parallaxX + Math.cos(angle) * crossLength1, parallaxY + Math.sin(angle) * crossLength1);
-                    ctx.stroke();
-                }
-
-                // Draw second, smaller cross (+)
-                ctx.strokeStyle = brighterColorRgba2;
-                const crossLength2 = crossLength1 * 0.6;
-                 for (let i = 0; i < 4; i++) {
-                    ctx.beginPath();
-                    const angle = (i / 4) * Math.PI * 2 + this.shineAngle;
-                    ctx.moveTo(parallaxX, parallaxY);
-                    ctx.lineTo(parallaxX + Math.cos(angle) * crossLength2, parallaxY + Math.sin(angle) * crossLength2);
-                    ctx.stroke();
-                }
+                drawShine(0.6, 1, Math.PI / 4);
+                drawShine(0.4, 0.6, 0);
 
                 if (this.shineProgress >= this.shineDuration) this.isShining = false;
             }
@@ -214,6 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentOpacity = this.baseOpacity + Math.sin(Date.now() * 0.001 * this.twinkleSpeed + this.twinkleOffset) * 0.3;
             }
             currentOpacity = Math.max(0, Math.min(1, currentOpacity));
+
             ctx.beginPath();
             ctx.arc(parallaxX, parallaxY, this.size, 0, Math.PI * 2);
             ctx.fillStyle = this.color.replace('OPACITY', currentOpacity);
@@ -234,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.vx = Math.cos(this.angle) * this.speed;
             this.vy = Math.sin(this.angle) * this.speed;
             this.opacity = 1;
-            const colorSet = shootingStarColors[Math.floor(Math.random() * shootingStarColors.length)];
+            const colorSet = config.shootingStarColors[Math.floor(Math.random() * config.shootingStarColors.length)];
             this.colorStart = colorSet.start;
             this.colorEnd = colorSet.end;
         }
@@ -244,14 +236,16 @@ document.addEventListener('DOMContentLoaded', () => {
             this.opacity -= 0.01;
         }
         draw(ctx) {
-            const grad = ctx.createLinearGradient(this.x, this.y, this.x - this.len * Math.cos(this.angle), this.y - this.len * Math.sin(this.angle));
+            const endX = this.x - this.len * Math.cos(this.angle);
+            const endY = this.y - this.len * Math.sin(this.angle);
+            const grad = ctx.createLinearGradient(this.x, this.y, endX, endY);
             grad.addColorStop(0, this.colorStart.replace('OPACITY', this.opacity));
             grad.addColorStop(1, this.colorEnd);
             ctx.strokeStyle = grad;
             ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.moveTo(this.x, this.y);
-            ctx.lineTo(this.x - this.len * Math.cos(this.angle), this.y - this.len * Math.sin(this.angle));
+            ctx.lineTo(endX, endY);
             ctx.stroke();
         }
         isOffscreen() {
@@ -294,7 +288,8 @@ document.addEventListener('DOMContentLoaded', () => {
         constructor() {
             this.x = Math.random() * nebulaCanvas.width;
             this.y = Math.random() * nebulaCanvas.height;
-                        this.radius = Math.random() * (nebulaCanvas.width / 2) + (nebulaCanvas.width / 2);
+            const maxWidth = Math.min(nebulaCanvas.width, 1400);
+            this.radius = Math.random() * (maxWidth / 2.5) + (maxWidth / 2.5);
             this.maxOpacity = Math.random() * 0.1 + 0.05;
             const r = Math.random() > 0.5 ? 255 : 100;
             const g = 0;
@@ -316,6 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
             grad.addColorStop(0.1, `rgba(${this.color}, ${this.maxOpacity})`);
             grad.addColorStop(0.5, `rgba(${this.color}, ${this.maxOpacity * 0.3})`);
             grad.addColorStop(1, `rgba(${this.color}, 0)`);
+            
             ctx.fillStyle = grad;
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
@@ -323,273 +319,248 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function recreateElements() {
-        nebulaClouds.length = 0;
-        for (let i = 0; i < 4; i++) nebulaClouds.push(new NebulaCloud());
+    function setupScene() {
+        state.nebulaClouds.length = 0;
+        for (let i = 0; i < 4; i++) state.nebulaClouds.push(new NebulaCloud());
         adjustStarCount();
     }
-    // Fire up the simulation
-    recreateElements();
-    // Adjust star count to match current starCountScale
+
     function adjustStarCount() {
-        const desired = Math.round(baseNumStars * starCountScale);
-        stars.length = 0; // Clear the array
+        const desired = Math.round(config.baseNumStars * state.starCountScale);
+        state.stars.length = 0;
         for (let i = 0; i < desired; i++) {
-            stars.push(new Star());
+            state.stars.push(new Star());
         }
     }
 
     function animateNebulas() {
         nebulaCtx.clearRect(0, 0, nebulaCanvas.width, nebulaCanvas.height);
-        nebulaClouds.forEach(cloud => {
+        state.nebulaClouds.forEach(cloud => {
             cloud.update();
             cloud.draw(nebulaCtx);
         });
     }
 
-    function animateStars() {
-        mouseX += (targetMouseX - mouseX) * 0.05;
-        mouseY += (targetMouseY - mouseY) * 0.05;
-        logoContainer.style.transform = `translate(calc(-50% + ${-mouseX * logoMovementRatio}px), calc(-50% + ${-mouseY * logoMovementRatio}px))`;
-        
-        // Calculate Lissajous position for subtle automatic parallax
+    function updateMousePosition() {
+        state.mouseX += (state.targetMouseX - state.mouseX) * 0.05;
+        state.mouseY += (state.targetMouseY - state.mouseY) * 0.05;
+        logoContainer.style.transform = `translate(calc(-50% + ${-state.mouseX * state.logoMovementRatio}px), calc(-50% + ${-state.mouseY * state.logoMovementRatio}px))`;
+    }
+
+    function drawStars() {
         const lissajousPos = calculateLissajousPosition(Date.now());
-        
-        // Combine mouse parallax with Lissajous motion for stars (but not for logo)
-        const combinedMouseX = mouseX + lissajousPos.x;
-        const combinedMouseY = mouseY + lissajousPos.y;
+        const combinedMouseX = state.mouseX + lissajousPos.x;
+        const combinedMouseY = state.mouseY + lissajousPos.y;
         
         starsCtx.clearRect(0, 0, starsCanvas.width, starsCanvas.height);
-        stars.forEach(star => star.draw(starsCtx, combinedMouseX, combinedMouseY));
-        if (Math.random() < shootingFreq) shootingStars.push(new ShootingStar());
-        for (let i = shootingStars.length - 1; i >= 0; i--) {
-            shootingStars[i].update();
-            shootingStars[i].draw(starsCtx);
-            if (shootingStars[i].isOffscreen()) shootingStars.splice(i, 1);
+        state.stars.forEach(star => star.draw(starsCtx, combinedMouseX, combinedMouseY));
+    }
+
+    function manageShootingStars() {
+        if (Math.random() < state.shootingFreq) {
+            state.shootingStars.push(new ShootingStar());
         }
 
-        // Update and draw astronaut trail particles
-        for (let i = astronautTrailParticles.length - 1; i >= 0; i--) {
-            astronautTrailParticles[i].update();
-            astronautTrailParticles[i].draw(starsCtx);
-            if (astronautTrailParticles[i].isFaded()) {
-                astronautTrailParticles.splice(i, 1);
+        for (let i = state.shootingStars.length - 1; i >= 0; i--) {
+            const shootingStar = state.shootingStars[i];
+            shootingStar.update();
+            shootingStar.draw(starsCtx);
+            if (shootingStar.isOffscreen()) {
+                state.shootingStars.splice(i, 1);
             }
         }
+    }
 
+    function manageAstronautTrail() {
+        for (let i = state.astronautTrailParticles.length - 1; i >= 0; i--) {
+            const particle = state.astronautTrailParticles[i];
+            particle.update();
+            particle.draw(starsCtx);
+            if (particle.isFaded()) {
+                state.astronautTrailParticles.splice(i, 1);
+            }
+        }
+    }
+
+    function animateStars() {
+        updateMousePosition();
+        drawStars();
+        manageShootingStars();
+        manageAstronautTrail();
         requestAnimationFrame(animateStars);
     }
 
     document.addEventListener('pointermove', (e) => {
         if (e.pointerType === 'mouse') {
-            targetMouseX = (e.clientX - window.innerWidth / 2);
-            targetMouseY = (e.clientY - window.innerHeight / 2);
+            state.targetMouseX = e.clientX - window.innerWidth / 2;
+            state.targetMouseY = e.clientY - window.innerHeight / 2;
             
-            // If mouse was outside and now it's inside, clear the timer
-            if (isMouseOutside) {
+            if (state.isMouseOutside) {
                 console.log('Mouse re-entered the window');
-                isMouseOutside = false;
-                if (mouseOutsideTimer) {
+                state.isMouseOutside = false;
+                if (state.mouseOutsideTimer) {
                     console.log('Clearing mouse-out timer');
-                    clearTimeout(mouseOutsideTimer);
-                    mouseOutsideTimer = null;
+                    clearTimeout(state.mouseOutsideTimer);
+                    state.mouseOutsideTimer = null;
                 }
             }
         }
     });
-    
-    // Add event listeners for mouse leaving and entering the window
+
     document.addEventListener('mouseout', (e) => {
         if (e.relatedTarget === null) {
-            isMouseOutside = true;
-            // Start a 3-second timer to reset the parallax effect
-            mouseOutsideTimer = setTimeout(() => {
-                // Reset the mouse position to center (which will center the logo)
-                targetMouseX = 0;
-                targetMouseY = 0;
-                mouseOutsideTimer = null;
-            }, 3000); // 3 seconds
+            state.isMouseOutside = true;
+            state.mouseOutsideTimer = setTimeout(() => {
+                state.targetMouseX = 0;
+                state.targetMouseY = 0;
+                state.mouseOutsideTimer = null;
+            }, 3000);
         }
     });
-    
+
     document.addEventListener('mouseover', (e) => {
         if (e.relatedTarget !== null) {
-            // If mouse enters the window, clear the timer
-            if (mouseOutsideTimer) {
-                clearTimeout(mouseOutsideTimer);
-                mouseOutsideTimer = null;
+            if (state.mouseOutsideTimer) {
+                clearTimeout(state.mouseOutsideTimer);
+                state.mouseOutsideTimer = null;
             }
-            isMouseOutside = false;
+            state.isMouseOutside = false;
         }
     });
 
+    function selectSpaceObject() {
+        const selected = config.spaceObjects[Math.floor(Math.random() * config.spaceObjects.length)];
+        const element = document.getElementById(selected.id);
+        document.querySelectorAll('.space-object').forEach(el => el.style.display = 'none');
+        element.style.display = 'block';
+        return { ...selected, element };
+    }
 
-    // initialize stars according to responsive scale (moved here after Star class is defined)
-    updateResponsiveSettings();
-    adjustStarCount();
-    
-    setInterval(animateNebulas, 100); // Low-frequency loop for background
-    animateStars(); // High-frequency loop for foreground
-
-    function launchSpaceObject() {
-        const container = spaceObjectContainer;
+    function getOffscreenPositions(buffer) {
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        
-        // Randomly select a space object
-        const spaceObjects = [
-            { id: 'astronaut', name: 'Astronaut' },
-            { id: 'meteorite', name: 'Meteorite' },
-            { id: 'rocket', name: 'Rocket' },
-            { id: 'satellite', name: 'Satellite' }
-        ];
-        const selectedObject = spaceObjects[Math.floor(Math.random() * spaceObjects.length)];
-        const spaceObjectEl = document.getElementById(selectedObject.id);
-        
-        // Hide all space objects first
-        document.querySelectorAll('.space-object').forEach(el => {
-            el.style.display = 'none';
-        });
-        
-        // Show only the selected space object
-        spaceObjectEl.style.display = 'block';
-        
-        // Force a reflow to ensure the display property is applied before animation
-        void container.offsetWidth;
-        
-        // Robustly compute space object size (try offsetWidth, bounding rect, then fallback)
-        const spaceObjectSizeCandidate = (spaceObjectEl && spaceObjectEl.offsetWidth) ? spaceObjectEl.offsetWidth :
-            (spaceObjectEl ? Math.round(spaceObjectEl.getBoundingClientRect().width) : 38);
-        const spaceObjectSize = spaceObjectSizeCandidate > 0 ? spaceObjectSizeCandidate : 38;
-        // Use a larger buffer to avoid clipping when rotated or scaled
-        const buffer = spaceObjectSize * 4 + 50;
-
-        // Clear any existing trail particles when a new space object launches
-        astronautTrailParticles.length = 0;
-        
-        // Remove any previous rocket-specific class
-        container.classList.remove('rocket');
- 
-        // 1. Define random start and end points off-screen
         const startPos = { x: 0, y: 0 };
         const endPos = { x: 0, y: 0 };
-        const edge = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
- 
+        const edge = Math.floor(Math.random() * 4);
+
         switch (edge) {
-            case 0: // Start top
+            case 0: // Top to Bottom
                 startPos.x = Math.random() * vw;
                 startPos.y = -buffer;
                 endPos.x = Math.random() * vw;
                 endPos.y = vh + buffer;
                 break;
-            case 1: // Start right
+            case 1: // Right to Left
                 startPos.x = vw + buffer;
                 startPos.y = Math.random() * vh;
                 endPos.x = -buffer;
                 endPos.y = Math.random() * vh;
                 break;
-            case 2: // Start bottom
+            case 2: // Bottom to Top
                 startPos.x = Math.random() * vw;
                 startPos.y = vh + buffer;
                 endPos.x = Math.random() * vw;
                 endPos.y = -buffer;
                 break;
-            case 3: // Start left
+            case 3: // Left to Right
                 startPos.x = -buffer;
                 startPos.y = Math.random() * vh;
                 endPos.x = vw + buffer;
                 endPos.y = Math.random() * vh;
                 break;
         }
- 
-        // 2. Set random duration and rotation
-        const duration = Math.random() * 10 + 10; // 10-20 seconds
-        let startRotation, endRotation;
-        
-        if (selectedObject.id === 'rocket') {
-            // Rocket's nose should point in the direction of travel.
-            // Image points up, so we calculate the angle and add 90 degrees.
-            const angle = Math.atan2(endPos.y - startPos.y, endPos.x - startPos.x) * (180 / Math.PI);
-            const rotation = angle + 90;
-            startRotation = rotation;
-            endRotation = rotation;
-            // Add rocket-specific class for squiggle animation
-            container.classList.add('rocket');
-        } else {
-            // Other objects should rotate like the astronaut
-            startRotation = Math.random() * 360;
-            endRotation = startRotation + (Math.random() > 0.5 ? 1 : -1) * 360; // Rotate 360 deg clockwise or counter-clockwise
-            // Reset transform for non-rocket objects
-            spaceObjectEl.style.transform = '';
-        }
- 
-        // 3. Apply CSS variables
-        container.style.setProperty('--start-x', `${startPos.x}px`);
-        container.style.setProperty('--start-y', `${startPos.y}px`);
-        container.style.setProperty('--end-x', `${endPos.x}px`);
-        container.style.setProperty('--end-y', `${endPos.y}px`);
-        container.style.setProperty('--duration', `${duration}s`);
-        container.style.setProperty('--start-rotate', `${startRotation}deg`);
-        container.style.setProperty('--end-rotate', `${endRotation}deg`);
- 
- 
-        // 4. Ensure visibility and GPU-accelerate transform
-        container.style.visibility = 'visible';
-        container.style.display = 'block';
-        container.style.willChange = 'transform, opacity';
-        container.style.opacity = '1';
-        container.classList.add('animate');
-        
-        // Ensure the selected space object remains visible after animation starts
-        spaceObjectEl.style.display = 'block';
+        return { startPos, endPos };
+    }
 
-        // Start emitting trail particles
+    function getObjectRotation(id, startPos, endPos, element) {
+        if (id === 'rocket') {
+            const angle = Math.atan2(endPos.y - startPos.y, endPos.x - startPos.x) * (180 / Math.PI) + 90;
+            return { startRotation: angle, endRotation: angle };
+        }
+        element.style.transform = '';
+        const startRotation = Math.random() * 360;
+        const endRotation = startRotation + (Math.random() > 0.5 ? 1 : -1) * 360;
+        return { startRotation, endRotation };
+    }
+
+    function launchSpaceObject() {
+        const container = spaceObjectContainer;
+        const spaceObject = selectSpaceObject();
+        void container.offsetWidth;
+
+        const size = (spaceObject.element && spaceObject.element.offsetWidth) ? spaceObject.element.offsetWidth :
+            (spaceObject.element ? Math.round(spaceObject.element.getBoundingClientRect().width) : 38);
+        const buffer = (size > 0 ? size : 38) * 4 + 50;
+
+        state.astronautTrailParticles.length = 0;
+        container.classList.remove('rocket');
+
+        const { startPos, endPos } = getOffscreenPositions(buffer);
+        const duration = Math.random() * 10 + 10;
+        const { startRotation, endRotation } = getObjectRotation(spaceObject.id, startPos, endPos, spaceObject.element);
+
+        if (spaceObject.id === 'rocket') {
+            container.classList.add('rocket');
+        }
+
+        Object.entries({
+            '--start-x': `${startPos.x}px`,
+            '--start-y': `${startPos.y}px`,
+            '--end-x': `${endPos.x}px`,
+            '--end-y': `${endPos.y}px`,
+            '--duration': `${duration}s`,
+            '--start-rotate': `${startRotation}deg`,
+            '--end-rotate': `${endRotation}deg`,
+        }).forEach(([prop, val]) => container.style.setProperty(prop, val));
+
+        Object.assign(container.style, {
+            visibility: 'visible',
+            display: 'block',
+            willChange: 'transform, opacity',
+            opacity: '1',
+        });
+        container.classList.add('animate');
+        spaceObject.element.style.display = 'block';
+
+        const msDuration = Math.round(duration * 1000);
+        manageAnimation(container, spaceObject.element, msDuration);
+    }
+    function manageAnimation(container, element, msDuration) {
         let trailInterval;
         const startEmittingTrail = () => {
             if (trailInterval) clearInterval(trailInterval);
             trailInterval = setInterval(() => {
-                const rect = spaceObjectEl.getBoundingClientRect();
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-                // Emit multiple particles for a denser trail
-                for (let i = 0; i < 3; i++) {
-                    astronautTrailParticles.push(new AstronautTrailParticle(
-                        centerX,
-                        centerY,
-                        Math.random() * 1.5 + 0.5, // Smaller size for subtlety
-                        'rgba(200, 220, 255, OPACITY)' // Subtle white/blue
-                    ));
+                const rect = element.getBoundingClientRect();
+                if (rect.width > 0) {
+                    const centerX = rect.left + rect.width / 2;
+                    const centerY = rect.top + rect.height / 2;
+                    for (let i = 0; i < 3; i++) {
+                        state.astronautTrailParticles.push(new AstronautTrailParticle(
+                            centerX,
+                            centerY,
+                            Math.random() * 1.5 + 0.5,
+                            'rgba(200, 220, 255, OPACITY)'
+                        ));
+                    }
                 }
-            }, 50); // Emit particles every 50ms
+            }, 50);
         };
-        startEmittingTrail();
- 
-        // Clear any previous timer/listener to avoid double-scheduling
-        if (container._astronautTimer) {
-            clearTimeout(container._astronautTimer);
-            container._astronautTimer = null;
-        }
-        if (container._astronautListener) {
-            container.removeEventListener('animationend', container._astronautListener);
-            container._astronautListener = null;
-        }
- 
-        // 5. Remove animate class after the expected duration (plus small buffer) to ensure it stays visible the entire path
-        const msDuration = Math.round(duration * 1000);
+
         const onDone = () => {
             container.classList.remove('animate');
-            // Stop emitting trail particles
             if (trailInterval) clearInterval(trailInterval);
-            // hide it safely
-            container.style.opacity = '0';
-            container.style.visibility = 'hidden';
-            // Schedule the next launch after a random delay
-            setTimeout(launchSpaceObject, Math.random() * 8000 + 2000); // 2-10 seconds delay
+            Object.assign(container.style, {
+                opacity: '0',
+                visibility: 'hidden',
+            });
+            setTimeout(launchSpaceObject, Math.random() * 8000 + 2000);
         };
-        // Attach both a timer and an animationend listener as a robust fallback
+
+        if (container._astronautTimer) clearTimeout(container._astronautTimer);
+        if (container._astronautListener) container.removeEventListener('animationend', container._astronautListener);
+        
         container._astronautTimer = setTimeout(onDone, msDuration + 300);
         container._astronautListener = (e) => {
-            // ensure we only respond to the move-astronaut animation (not child animations)
             if (e.animationName === 'move-astronaut') {
                 clearTimeout(container._astronautTimer);
                 container._astronautTimer = null;
@@ -597,19 +568,25 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
         container.addEventListener('animationend', container._astronautListener);
+
+        startEmittingTrail();
+    }
+    
+    function init() {
+        resizeCanvases();
+        updateResponsiveSettings();
+        setupScene();
+
+        window.addEventListener('resize', debounce(() => {
+            resizeCanvases();
+            updateResponsiveSettings();
+            setupScene();
+        }, 250));
+
+        setInterval(animateNebulas, 100);
+        animateStars();
+        setTimeout(launchSpaceObject, 5000);
     }
 
-    // Initial launch after a short delay
-    setTimeout(launchSpaceObject, 5000);
-    function debounce(func, wait) {
-        let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
-            };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
-    }
+    init();
 });
