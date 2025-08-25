@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let targetMouseX = 0;
     let targetMouseY = 0;
     let logoMovementRatio = 0.08;
+    let mouseOutsideTimer = null;
+    let isMouseOutside = false;
 
     function resizeCanvases() {
         const width = window.innerWidth;
@@ -51,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (w <= 480 || (isPortrait && w < 900)) {
             starSizeScale = 0.6;
             // increase small-screen density 4× relative to the previous small setting
-            starCountScale = 0.35 * (8/3); // decrease small-screen density by a third
+            starCountScale = 0.3; // decrease small-screen density by half by a third
             shootingFreq = 0.005;
             // reduce parallax so the logo stays visually centered on phones
             logoMovementRatio = 0.02;
@@ -356,6 +358,42 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.pointerType === 'mouse') {
             targetMouseX = (e.clientX - window.innerWidth / 2);
             targetMouseY = (e.clientY - window.innerHeight / 2);
+            
+            // If mouse was outside and now it's inside, clear the timer
+            if (isMouseOutside) {
+                console.log('Mouse re-entered the window');
+                isMouseOutside = false;
+                if (mouseOutsideTimer) {
+                    console.log('Clearing mouse-out timer');
+                    clearTimeout(mouseOutsideTimer);
+                    mouseOutsideTimer = null;
+                }
+            }
+        }
+    });
+    
+    // Add event listeners for mouse leaving and entering the window
+    document.addEventListener('mouseout', (e) => {
+        if (e.relatedTarget === null) {
+            isMouseOutside = true;
+            // Start a 3-second timer to reset the parallax effect
+            mouseOutsideTimer = setTimeout(() => {
+                // Reset the mouse position to center (which will center the logo)
+                targetMouseX = 0;
+                targetMouseY = 0;
+                mouseOutsideTimer = null;
+            }, 3000); // 3 seconds
+        }
+    });
+    
+    document.addEventListener('mouseover', (e) => {
+        if (e.relatedTarget !== null) {
+            // If mouse enters the window, clear the timer
+            if (mouseOutsideTimer) {
+                clearTimeout(mouseOutsideTimer);
+                mouseOutsideTimer = null;
+            }
+            isMouseOutside = false;
         }
     });
 
