@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let mouseY = 0;
     let targetMouseX = 0;
     let targetMouseY = 0;
-    const logoMovementRatio = 0.08;
+    let logoMovementRatio = 0.08;
 
     function resizeCanvases() {
         const width = window.innerWidth;
@@ -20,13 +20,59 @@ document.addEventListener('DOMContentLoaded', () => {
         starsCanvas.width = width;
         starsCanvas.height = height;
     }
-    window.addEventListener('resize', resizeCanvases);
+    // Keep canvas sizing and responsive settings in sync
+    window.addEventListener('resize', () => { resizeCanvases(); updateResponsiveSettings(); });
     resizeCanvases();
 
-    const numStars = 1000;
+    let baseNumStars = 1000;
     const stars = [];
     const shootingStars = [];
     const nebulaClouds = [];
+    // Responsive controls (adjust for small screens / portrait)
+    let starSizeScale = 1;
+    let starCountScale = 1;
+    let shootingFreq = 0.015;
+    // keep previous values so we can detect changes and adjust existing stars
+    let _prevStarSizeScale = starSizeScale;
+    let _prevStarCountScale = starCountScale;
+    function updateResponsiveSettings() {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const isPortrait = h > w;
+        // Mobile / narrow portrait: fewer, smaller stars but user requested 4× density (no cap)
+        if (w <= 480 || (isPortrait && w < 900)) {
+            starSizeScale = 0.6;
+            // increase small-screen density 4× relative to the previous small setting
+            starCountScale = 0.35 * 4; // 1.4 -> denser than desktop
+            shootingFreq = 0.005;
+            // reduce parallax so the logo stays visually centered on phones
+            logoMovementRatio = 0.02;
+        } else if (w <= 900) {
+            // Small laptops / large phones: slightly reduced
+            starSizeScale = 0.8;
+            starCountScale = 0.6;
+            shootingFreq = 0.008;
+            logoMovementRatio = 0.04;
+        } else {
+            // Desktop / large displays: original settings
+            starSizeScale = 1;
+            starCountScale = 1;
+            shootingFreq = 0.015;
+            logoMovementRatio = 0.08;
+        }
+        // If the size scale changed, adjust existing star sizes proportionally
+        if (starSizeScale !== _prevStarSizeScale && stars.length > 0) {
+            const ratio = starSizeScale / (_prevStarSizeScale || 1);
+            stars.forEach(s => { s.size = Math.max(0.2, s.size * ratio); });
+            _prevStarSizeScale = starSizeScale;
+        }
+        // If the count scale changed, add/remove stars to match desired density
+        if (starCountScale !== _prevStarCountScale) {
+            adjustStarCount();
+            _prevStarCountScale = starCountScale;
+        }
+    }
+    updateResponsiveSettings();
 
     const starColors = {
         whiteBlue: 'rgba(200, 200, 255, OPACITY)',
@@ -67,13 +113,14 @@ document.addEventListener('DOMContentLoaded', () => {
             this.x = Math.random() * starsCanvas.width;
             this.y = Math.random() * starsCanvas.height;
             this.z = Math.random() * starsCanvas.width;
-            this.size = Math.random() * 2 + 1;
+            // scale star sizes responsively (starSizeScale set by updateResponsiveSettings)
+            this.size = (Math.random() * 2 + 1) * starSizeScale;
             this.baseOpacity = Math.random() * 0.5 + 0.3;
             this.opacity = this.baseOpacity;
             this.isRedGiant = Math.random() > 0.98;
             if (this.isRedGiant) {
                 this.color = 'rgba(255, 100, 100, OPACITY)';
-                this.size = Math.random() * 2 + 2;
+                this.size = (Math.random() * 2 + 2) * starSizeScale;
                 this.pulseDirection = 1;
                 this.pulseSpeed = Math.random() * 0.02;
             } else {
@@ -219,7 +266,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     for (let i = 0; i < 4; i++) nebulaClouds.push(new NebulaCloud());
-    for (let i = 0; i < numStars; i++) stars.push(new Star());
+    // Adjust star count to match current starCountScale
+    function adjustStarCount() {
+        const desired = Math.round(baseNumStars * starCountScale);
+        if (desired > stars.length) {
+            const toAdd = desired - stars.length;
+            for (let i = 0; i < toAdd; i++) stars.push(new Star());
+        } else if (desired < stars.length) {
+            stars.length = desired;
+        }
+    }
+    // initialize stars according to responsive scale
+    updateResponsiveSettings();
+    adjustStarCount();
 
     function animateNebulas() {
         nebulaCtx.clearRect(0, 0, nebulaCanvas.width, nebulaCanvas.height);
@@ -235,7 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
         logoContainer.style.transform = `translate(calc(-50% + ${-mouseX * logoMovementRatio}px), calc(-50% + ${-mouseY * logoMovementRatio}px))`;
         starsCtx.clearRect(0, 0, starsCanvas.width, starsCanvas.height);
         stars.forEach(star => star.draw(starsCtx, mouseX, mouseY));
-        if (Math.random() < 0.015) shootingStars.push(new ShootingStar());
+        if (Math.random() < shootingFreq) shootingStars.push(new ShootingStar());
         for (let i = shootingStars.length - 1; i >= 0; i--) {
             shootingStars[i].update();
             shootingStars[i].draw(starsCtx);
@@ -273,47 +332,53 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function launchAstronaut() {
         const container = astronautContainer;
+        const astronautEl = document.getElementById('astronaut');
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        const astronautSize = 38; // Must match CSS
-
+        // Robustly compute astronaut size (try offsetWidth, bounding rect, then fallback)
+        const astronautSizeCandidate = (astronautEl && astronautEl.offsetWidth) ? astronautEl.offsetWidth :
+            (astronautEl ? Math.round(astronautEl.getBoundingClientRect().width) : 38);
+        const astronautSize = astronautSizeCandidate > 0 ? astronautSizeCandidate : 38;
+        // Use a larger buffer to avoid clipping when rotated or scaled
+        const buffer = astronautSize * 4 + 50;
+ 
         // 1. Define random start and end points off-screen
         const startPos = { x: 0, y: 0 };
         const endPos = { x: 0, y: 0 };
         const edge = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
-
+ 
         switch (edge) {
             case 0: // Start top
                 startPos.x = Math.random() * vw;
-                startPos.y = -astronautSize;
+                startPos.y = -buffer;
                 endPos.x = Math.random() * vw;
-                endPos.y = vh + astronautSize;
+                endPos.y = vh + buffer;
                 break;
             case 1: // Start right
-                startPos.x = vw + astronautSize;
+                startPos.x = vw + buffer;
                 startPos.y = Math.random() * vh;
-                endPos.x = -astronautSize;
+                endPos.x = -buffer;
                 endPos.y = Math.random() * vh;
                 break;
             case 2: // Start bottom
                 startPos.x = Math.random() * vw;
-                startPos.y = vh + astronautSize;
+                startPos.y = vh + buffer;
                 endPos.x = Math.random() * vw;
-                endPos.y = -astronautSize;
+                endPos.y = -buffer;
                 break;
             case 3: // Start left
-                startPos.x = -astronautSize;
+                startPos.x = -buffer;
                 startPos.y = Math.random() * vh;
-                endPos.x = vw + astronautSize;
+                endPos.x = vw + buffer;
                 endPos.y = Math.random() * vh;
                 break;
         }
-
+ 
         // 2. Set random duration and rotation
         const duration = Math.random() * 10 + 10; // 10-20 seconds
         const startRotation = Math.random() * 360;
         const endRotation = startRotation + (Math.random() > 0.5 ? 1 : -1) * 360; // Rotate 360 deg clockwise or counter-clockwise
-
+ 
         // 3. Apply CSS variables
         container.style.setProperty('--start-x', `${startPos.x}px`);
         container.style.setProperty('--start-y', `${startPos.y}px`);
@@ -322,18 +387,48 @@ document.addEventListener('DOMContentLoaded', () => {
         container.style.setProperty('--duration', `${duration}s`);
         container.style.setProperty('--start-rotate', `${startRotation}deg`);
         container.style.setProperty('--end-rotate', `${endRotation}deg`);
-
-        // 4. Trigger animation
+ 
+        // Debugging log (can be removed later)
+        console.log('launchAstronaut()', { startPos, endPos, duration, astronautSize, buffer });
+ 
+        // 4. Ensure visibility and GPU-accelerate transform
+        container.style.visibility = 'visible';
+        container.style.display = 'block';
+        container.style.willChange = 'transform, opacity';
+        container.style.opacity = '1';
         container.classList.add('animate');
-
-        // 5. Listen for animation end to reset
-        const onAnimationEnd = () => {
+ 
+        // Clear any previous timer/listener to avoid double-scheduling
+        if (container._astronautTimer) {
+            clearTimeout(container._astronautTimer);
+            container._astronautTimer = null;
+        }
+        if (container._astronautListener) {
+            container.removeEventListener('animationend', container._astronautListener);
+            container._astronautListener = null;
+        }
+ 
+        // 5. Remove animate class after the expected duration (plus small buffer) to ensure it stays visible the entire path
+        const msDuration = Math.round(duration * 1000);
+        const onDone = () => {
             container.classList.remove('animate');
-            container.removeEventListener('animationend', onAnimationEnd);
+            // hide it safely
+            container.style.opacity = '0';
+            container.style.visibility = 'hidden';
             // Schedule the next launch after a random delay
-            setTimeout(launchAstronaut, Math.random() * 15000 + 10000); // 10-25 seconds delay
+            setTimeout(launchAstronaut, Math.random() * 15000 + 30000); // 30-45 seconds delay
         };
-        container.addEventListener('animationend', onAnimationEnd);
+        // Attach both a timer and an animationend listener as a robust fallback
+        container._astronautTimer = setTimeout(onDone, msDuration + 300);
+        container._astronautListener = (e) => {
+            // ensure we only respond to the move-astronaut animation (not child animations)
+            if (e.animationName === 'move-astronaut') {
+                clearTimeout(container._astronautTimer);
+                container._astronautTimer = null;
+                onDone();
+            }
+        };
+        container.addEventListener('animationend', container._astronautListener);
     }
 
     // Initial launch after a short delay
