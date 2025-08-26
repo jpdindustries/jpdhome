@@ -292,7 +292,8 @@ document.addEventListener('DOMContentLoaded', () => {
             this.x = Math.random() * nebulaCanvas.width;
             this.y = Math.random() * nebulaCanvas.height;
             const maxWidth = Math.min(nebulaCanvas.width, 1400);
-            this.radius = Math.random() * (maxWidth / 2.5) + (maxWidth / 2.5);
+            this.baseRadius = Math.random() * (maxWidth / 2.5) + (maxWidth / 2.5);
+            this.radius = this.baseRadius;
             this.maxOpacity = Math.random() * 0.1 + 0.05;
             const r = Math.random() > 0.5 ? 255 : 100;
             const g = 0;
@@ -300,10 +301,21 @@ document.addEventListener('DOMContentLoaded', () => {
             this.color = `${r}, ${g}, ${b}`;
             this.vx = (Math.random() - 0.5) * 0.3;
             this.vy = (Math.random() - 0.5) * 0.3;
+            
+            // Pulsing properties
+            this.pulseSpeed = Math.random() * 0.0005 + 0.0002; // Very slow pulse
+            this.pulseDirection = 1;
+            this.pulseAmount = Math.random() * 0.4 + 0.2; // Pulse between 20-60% of base size
+            this.pulseOffset = Math.random() * Math.PI * 2; // Random starting phase
         }
         update() {
             this.x += this.vx;
             this.y += this.vy;
+            
+            // Update pulsing size
+            const pulseValue = Math.sin(Date.now() * this.pulseSpeed + this.pulseOffset);
+            this.radius = this.baseRadius * (1 + pulseValue * this.pulseAmount);
+            
             if (this.x - this.radius > nebulaCanvas.width) this.x = -this.radius;
             if (this.x + this.radius < 0) this.x = nebulaCanvas.width + this.radius;
             if (this.y - this.radius > nebulaCanvas.height) this.y = -this.radius;
