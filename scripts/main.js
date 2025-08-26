@@ -42,6 +42,9 @@ document.addEventListener('DOMContentLoaded', () => {
         logoMovementRatio: config.logoMovementRatio,
         mouseOutsideTimer: null,
         isMouseOutside: false,
+        mouseIdleTimer: null,
+        isMouseIdle: false,
+        lastMouseActivityTime: Date.now(),
         stars: [],
         shootingStars: [],
         astronautTrailParticles: [],
@@ -342,9 +345,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateMousePosition() {
-        state.mouseX += (state.targetMouseX - state.mouseX) * 0.05;
-        state.mouseY += (state.targetMouseY - state.mouseY) * 0.05;
+        // Use different smoothing factors based on whether we're resetting to center
+        const smoothingFactor = (state.isMouseIdle || state.isMouseOutside) ? 0.02 : 0.05;
+        state.mouseX += (state.targetMouseX - state.mouseX) * smoothingFactor;
+        state.mouseY += (state.targetMouseY - state.mouseY) * smoothingFactor;
         logoContainer.style.transform = `translate(calc(-50% + ${-state.mouseX * state.logoMovementRatio}px), calc(-50% + ${-state.mouseY * state.logoMovementRatio}px))`;
+        
+        // Check if mouse has been idle for 3 seconds
+        const currentTime = Date.now();
+        if (currentTime - state.lastMouseActivityTime > 3000 && !state.isMouseIdle && !state.isMouseOutside) {
+            state.isMouseIdle = true;
+            state.targetMouseX = 0;
+            state.targetMouseY = 0;
+        }
     }
 
     function drawStars() {
@@ -394,6 +407,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.pointerType === 'mouse') {
             state.targetMouseX = e.clientX - window.innerWidth / 2;
             state.targetMouseY = e.clientY - window.innerHeight / 2;
+            state.lastMouseActivityTime = Date.now();
+            
+            // Clear idle state if mouse moves
+            if (state.isMouseIdle) {
+                state.isMouseIdle = false;
+                if (state.mouseIdleTimer) {
+                    clearTimeout(state.mouseIdleTimer);
+                    state.mouseIdleTimer = null;
+                }
+            }
             
             if (state.isMouseOutside) {
                 console.log('Mouse re-entered the window');
