@@ -1,7 +1,7 @@
-# Website Specification
+# Website Specification (v2 - WebGL)
 
 ## Project Overview
-This document outlines the specification for an immersive, space-themed website. The project uses JavaScript and HTML5 Canvas to create an interactive parallax starfield with nebula effects, centered around a primary logo. The design incorporates a dark, cosmic color scheme with red accents to align with the brand identity.
+This document outlines the specification for an immersive, space-themed website, refactored to use **WebGL** for high-performance rendering. The project leverages the **Three.js** library to create a GPU-accelerated interactive parallax starfield with nebula effects, centered around a primary logo. The goal of this refactor was to solve performance bottlenecks on high-resolution displays while maintaining and enhancing the original visual experience.
 
 ## Visual Design
 
@@ -17,39 +17,41 @@ This document outlines the specification for an immersive, space-themed website.
 
 ---
 
-## Core Features (Implemented)
+## Core Features
 
 ### Multi-Layered Parallax System
 A dynamic parallax effect creates a sense of depth and immersion.
-- **Desktop Interaction**: The scene responds to cursor movement, shifting different layers at varying speeds.
-- **Automatic Parallax**: A subtle, continuous parallax effect is achieved using a Lissajous curve algorithm, ensuring the scene remains dynamic even without user interaction.
-- **Mobile Interaction**: Utilizes the `DeviceOrientation` API (gyroscope) for motion control.
+- **Technology**: Implemented by moving multiple `THREE.Points` layers at different speeds.
+- **Desktop Interaction**: The scene responds to cursor movement, shifting the star layers to create a parallax effect.
+- **Automatic Parallax (TODO)**: A subtle, continuous parallax effect using a Lissajous curve algorithm needs to be re-implemented to keep the scene dynamic.
 
 ### Dynamic Starfield
-The background is a procedurally generated starfield rendered on an HTML5 Canvas.
-- **Star Population**: ~1000 stars, with density adjusted for screen size.
-- **Star Colors**: A mix of white/blue-white (70%), yellow-white (20%), and red-tinted (10%) stars.
+The background is a procedurally generated starfield rendered by WebGL.
+- **Star Population**: ~20,000 stars, distributed across two layers for depth.
+- **Star Colors**: A mix of white/blue-white, yellow-white, and red-tinted stars.
 - **Special Stars**:
-  - **Red Giants**: Larger, rarer stars with a subtle pulsing red glow.
-  - **Twinkling Stars**: Stars feature a gentle twinkling animation.
-  - **Shining Stars**: Occasional stars will emit a bright, cross-shaped glint effect.
-- **Shooting Stars**: Faint streaks of light periodically traverse the starfield.
+  - **Twinkling Stars (TODO)**: The gentle twinkling animation needs to be perfected.
+  - **Shining Stars**: Occasional stars emit a bright, cross-shaped glint effect, implemented in a custom shader.
 
-### Nebula Clouds
-Subtle, generative nebula clouds float in the background to add depth and color to the scene.
-- **Generation**: Rendered on a separate canvas layer.
-- **Appearance**: Soft, radial gradients with a mix of red and purple hues.
-- **Animation**: Clouds slowly drift across the viewport.
+### Generative Nebula Clouds
+Subtle, generative nebula clouds float in the background.
+- **Technology**: Rendered using a custom GLSL shader on large `THREE.PlaneGeometry`.
+- **Appearance**: Soft, procedural noise generates cloud-like structures with red and purple hues.
+- **Animation (TODO)**: The drifting animation needs refinement to feel smoother and more natural. The edges of the planes are sometimes visible and must be hidden.
 
 ### Centered Logo
-- **Position**: The logo is fixed in the center of the viewport.
-- **Visual Effect**: A pulsing red drop-shadow glow is applied to the logo, enhancing its visibility.
-- **Parallax Integration**: The logo moves in response to user input as the topmost layer of the parallax system.
+- **Position**: The logo is a DOM element fixed in the center of the viewport.
+- **Visual Effect**: A pulsing red drop-shadow glow is applied via CSS.
+- **Parallax Integration**: The logo moves in response to user input.
+- **Recentering (TODO)**: The logic to re-center the logo after a period of mouse inactivity or when the cursor leaves the window needs to be re-implemented.
 
 ### Floating Space Objects
-A variety of space-themed objects traverse the scene, each with unique animations.
-- **Objects**: Astronaut, meteorite, rocket, and satellite.
-- **Particle Trails**: Objects emit a stream of particles, creating a subtle trail effect.
+A variety of space-themed objects traverse the scene.
+- **Objects**: Astronaut, meteorite, rocket, and satellite, animated via CSS.
+- **Particle Trails**: Objects emit a stream of particles from a GPU-based particle system, creating a visible trail.
+
+### Black Hole Animation (TODO)
+- A very rare animation where a black hole appears and visually distorts the starfield behind it.
 
 ---
 
@@ -60,35 +62,29 @@ A variety of space-themed objects traverse the scene, each with unique animation
 /
 ├── index.html
 ├── assets/
-│   ├── jpdlogo.png
-│   ├── jpdico.png
-│   ├── jpdaustronaut.png
-│   ├── meteorite.png
-│   ├── rocket.png
-│   └── satellite.png
+│   ├── ... (image assets) ...
 ├── styles/
 │   ├── main.css
 │   └── animations.css
 └── scripts/
-    └── main.js
+    └── scene.js  <-- Formerly main.js
 ```
 
 ### Key Technologies
-- **Rendering**: HTML5 Canvas 2D API for the starfield and nebulas.
-- **Logic**: Vanilla JavaScript handles all animations, parallax calculations, and event handling.
-- **Styling**: CSS3 for layout, logo effects, and animations.
+- **Rendering**: **WebGL** via the **Three.js** library.
+- **Logic**: Vanilla JavaScript (ES6 Modules) handles all animations, parallax, and event handling.
+- **Shaders**: Custom **GLSL** shaders are used for the nebula and star effects.
+- **Styling**: CSS3 for layout, logo effects, and DOM animations.
 - **Performance**:
+  - All heavy rendering is offloaded to the GPU.
   - `requestAnimationFrame` for smooth animation loops.
-  - Separate, lower-frequency animation loop for low-priority background elements (nebulas).
-- **Accessibility**:
-  - Respects `prefers-reduced-motion` to disable animations (though this is not yet fully implemented).
 
 ### CSS Theming
-CSS Custom Properties are used for consistent theming, especially for the red accent colors.
+CSS Custom Properties are used for consistent theming.
 ```css
 :root {
   --primary-red: #FF0000;
-  --red-glow: 0 0 10px rgba(255, 255, 255, 0.3), 0 0 20px rgba(255, 255, 255, 0.2);
+  --red-glow: 0 0 15px rgba(255, 100, 100, 0.7), 0 0 25px rgba(255, 0, 0, 0.5);
   --background-color: #16161D;
 }
 ```
@@ -96,6 +92,4 @@ CSS Custom Properties are used for consistent theming, especially for the red ac
 ---
 
 ## Known Issues
-
-- **Performance**: The simulation may not consistently achieve 60 FPS on lower-end hardware or large displays due to the high number of stars and particle effects.
-- **iOS Device Orientation**: Gyroscope-based parallax requires user permission on iOS, which may not always be granted.
+- The new features from the TODO list need to be implemented.
