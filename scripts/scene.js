@@ -151,14 +151,14 @@ function createStars() {
 
 
 function createNebula() {
-    const planeSize = 4500; // Much larger size to span more of window
+    const planeSize = 8000; // Much larger size for seamless coverage
     const nebulaGeometry = new THREE.PlaneGeometry(planeSize, planeSize);
-    for (let i = 0; i < 6; i++) { // More clouds for better coverage
+    for (let i = 0; i < 10; i++) { // More clouds for seamless coverage
         const r = Math.random() > 0.5 ? 1.0 : 0.4; const b = Math.random() > 0.5 ? 1.0 : 0.6;
         const nebulaMaterial = new THREE.ShaderMaterial({
-            uniforms: { 
-                uTime: { value: 0 }, 
-                uColor: { value: new THREE.Vector3(r, 0.0, b) }, 
+            uniforms: {
+                uTime: { value: 0 },
+                uColor: { value: new THREE.Vector3(r, 0.0, b) },
                 uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
                 uOffset: { value: new THREE.Vector2(Math.random() * 100, Math.random() * 100) }
             },
@@ -182,18 +182,21 @@ function createNebula() {
                     vec2 r = vec2(fbm(st + 1.0 * q + vec2(1.7, 9.2) + 0.08 * uTime), fbm(st + 1.0 * q + vec2(8.3, 2.8) + 0.063 * uTime));
                     float f = fbm(st + r);
                     vec3 color = mix(vec3(0.035, 0.0, 0.115), uColor, f * f * 1.5);
-                    
-                    // Fade edges to hide plane boundaries
-                    float edgeFade = smoothstep(0.0, 0.3, vUv.x) * smoothstep(1.0, 0.7, vUv.x) * 
-                                     smoothstep(0.0, 0.3, vUv.y) * smoothstep(1.0, 0.7, vUv.y);
-                    
-                    float cloudAlpha = smoothstep(0.4, 0.7, f) * 0.25 * edgeFade;
+
+                    // Much more gradual edge fading to eliminate hard edges
+                    float edgeFadeX = smoothstep(0.0, 0.5, vUv.x) * smoothstep(1.0, 0.5, vUv.x);
+                    float edgeFadeY = smoothstep(0.0, 0.5, vUv.y) * smoothstep(1.0, 0.5, vUv.y);
+                    float edgeFade = edgeFadeX * edgeFadeY;
+
+                    // Softer alpha calculation for smoother blending
+                    float cloudAlpha = smoothstep(0.3, 0.8, f) * 0.15 * edgeFade;
                     gl_FragColor = vec4(color, cloudAlpha);
                 }`,
             transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
         });
         const cloud = new THREE.Mesh(nebulaGeometry, nebulaMaterial);
-        cloud.position.set(THREE.MathUtils.randFloatSpread(800), THREE.MathUtils.randFloatSpread(800), THREE.MathUtils.randFloat(-200, -1400));
+        // Better positioning with more overlap to prevent gaps
+        cloud.position.set(THREE.MathUtils.randFloatSpread(1200), THREE.MathUtils.randFloatSpread(1200), THREE.MathUtils.randFloat(-200, -1400));
         cloud.userData.velocity = new THREE.Vector3((Math.random() - 0.5) * 0.00025, (Math.random() - 0.5) * 0.00025, 0); // Nearly static movement
         cloud.rotation.z = Math.random() * Math.PI * 2; // Random rotation
         scene.add(cloud);
