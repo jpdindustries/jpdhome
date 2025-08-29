@@ -25,7 +25,7 @@ let currentSpaceObjectElement;
 
 // Config
 const config = {
-    logoMovementRatio: 0.1,
+    logoMovementRatio: 0.05,
     spaceObjects: [
         { id: 'astronaut', name: 'Astronaut' },
         { id: 'meteorite', name: 'Meteorite' },
@@ -345,12 +345,12 @@ function animate() {
         targetLogoOffsetY = -mouse.y * config.logoMovementRatio;
         
         // Smoothly interpolate toward target position
-        const followSpeed = 0.05;
+        const followSpeed = 0.02;
         currentLogoOffsetX = THREE.MathUtils.lerp(currentLogoOffsetX, targetLogoOffsetX, followSpeed);
         currentLogoOffsetY = THREE.MathUtils.lerp(currentLogoOffsetY, targetLogoOffsetY, followSpeed);
     } else {
         // Smoothly return to center when mouse is inactive
-        const centeringSpeed = 0.05;
+        const centeringSpeed = 0.02;
         currentLogoOffsetX = THREE.MathUtils.lerp(currentLogoOffsetX, 0, centeringSpeed);
         currentLogoOffsetY = THREE.MathUtils.lerp(currentLogoOffsetY, 0, centeringSpeed);
     }
