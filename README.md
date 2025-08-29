@@ -1,12 +1,12 @@
 # jpd.industries
 
-A space-themed website with interactive parallax effects.
+An immersive space-themed website with GPU-accelerated WebGL rendering and interactive parallax effects.
 
 ![Demo GIF](assets/demo.gif)
 
 ## Overview
 
-This is the static homepage for jpd.industries. It uses HTML5 Canvas, JavaScript, and CSS to create an interactive space scene. It features a multi-layered parallax system with procedurally generated stars, nebulas, and other objects that respond to user input.
+This is the static homepage for jpd.industries, featuring a high-performance WebGL implementation using Three.js. The website creates an immersive space scene with GPU-accelerated rendering, multi-layered parallax systems, procedurally generated starfields, and dynamic nebula effects that respond to user input.
 
 ## Features
 

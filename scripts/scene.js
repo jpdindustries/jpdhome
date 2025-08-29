@@ -16,6 +16,8 @@ let isMouseActive = false;
 const MOUSE_INACTIVITY_DELAY = 3000; // 3 seconds
 let currentLogoOffsetX = 0;
 let currentLogoOffsetY = 0;
+let targetLogoOffsetX = 0;
+let targetLogoOffsetY = 0;
 
 // DOM elements
 let logoContainer, spaceObjectContainer;
@@ -73,7 +75,7 @@ function init() {
     animate();
 }
 
-function createStarLayer(numStars, size, depth, parallaxFactor) {
+function createStarLayer(numStars, size, minDepth, maxDepth, parallaxFactor) {
     const starGeometry = new THREE.BufferGeometry();
     const positions = new Float32Array(numStars * 3);
     const colors = new Float32Array(numStars * 3);
@@ -85,7 +87,7 @@ function createStarLayer(numStars, size, depth, parallaxFactor) {
         const i3 = i * 3;
         positions[i3] = THREE.MathUtils.randFloatSpread(2000);
         positions[i3 + 1] = THREE.MathUtils.randFloatSpread(2000);
-        positions[i3 + 2] = THREE.MathUtils.randFloatSpread(depth);
+        positions[i3 + 2] = THREE.MathUtils.randFloat(minDepth, maxDepth);
 
         const rand = Math.random();
         if (rand < 0.7) color.set(0xaec6ff);
@@ -140,8 +142,10 @@ function createStarLayer(numStars, size, depth, parallaxFactor) {
 }
 
 function createStars() {
-    // Single layer with 100k stars, controlled max size
-    starLayers.push(createStarLayer(100000, 2.5, 2000, 0.1)); // 100k starfield, much higher parallax
+    // Multiple layers at different depths
+    starLayers.push(createStarLayer(30000, 2, 500, 200, 0.05));  // Distant layer
+    starLayers.push(createStarLayer(50000, 3, 700, 400, 0.1));    // Middle layer
+    starLayers.push(createStarLayer(20000, 4, 900, 600, 0.2));     // Near layer
     starLayers.forEach(layer => scene.add(layer));
 }
 
@@ -190,7 +194,7 @@ function createNebula() {
         });
         const cloud = new THREE.Mesh(nebulaGeometry, nebulaMaterial);
         cloud.position.set(THREE.MathUtils.randFloatSpread(800), THREE.MathUtils.randFloatSpread(800), THREE.MathUtils.randFloat(-200, -1400));
-        cloud.userData.velocity = new THREE.Vector3((Math.random() - 0.5) * 0.05, (Math.random() - 0.5) * 0.05, 0); // Nearly static movement
+        cloud.userData.velocity = new THREE.Vector3((Math.random() - 0.5) * 0.00025, (Math.random() - 0.5) * 0.00025, 0); // Nearly static movement
         cloud.rotation.z = Math.random() * Math.PI * 2; // Random rotation
         scene.add(cloud);
         nebulaClouds.push(cloud);
@@ -336,8 +340,14 @@ function animate() {
 
     // Logo recentering logic
     if (isMouseActive) {
-        currentLogoOffsetX = -mouse.x * config.logoMovementRatio;
-        currentLogoOffsetY = -mouse.y * config.logoMovementRatio;
+        // Set target position based on mouse position
+        targetLogoOffsetX = -mouse.x * config.logoMovementRatio;
+        targetLogoOffsetY = -mouse.y * config.logoMovementRatio;
+        
+        // Smoothly interpolate toward target position
+        const followSpeed = 0.05;
+        currentLogoOffsetX = THREE.MathUtils.lerp(currentLogoOffsetX, targetLogoOffsetX, followSpeed);
+        currentLogoOffsetY = THREE.MathUtils.lerp(currentLogoOffsetY, targetLogoOffsetY, followSpeed);
     } else {
         // Smoothly return to center when mouse is inactive
         const centeringSpeed = 0.05;
