@@ -217,9 +217,6 @@ class VersionDetector {
         await this.loadStylesheet('webgl/styles/main.css');
         await this.loadStylesheet('webgl/styles/animations.css');
 
-        // Load WebGL script
-        await this.loadScript('webgl/scripts/scene.js');
-
         // Update HTML content for WebGL
         this.updateHTMLForWebGL();
     }
