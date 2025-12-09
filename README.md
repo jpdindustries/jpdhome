@@ -39,10 +39,12 @@ The website features a multi-layered parallax system with procedurally generated
 
 ### File Structure
 ```
-/
+/ 
 ├── index.html                 # Main entry point with detection
 ├── CNAME                      # GitHub Pages domain
 ├── README.md                  # This file
+├── Dockerfile                 # Docker image for webserver
+├── docker-compose.yml         # Docker Compose for easy running
 ├── base/                      # Canvas 2D version
 ├── webgl/                     # WebGL version
 ├── shared/                    # Common assets
@@ -73,6 +75,18 @@ python3 -m http.server 8000
 # or
 npx serve .
 ```
+
+### Running with Docker
+```bash
+# Build and run with Docker Compose
+docker-compose up --build
+
+# Or build and run manually
+docker build -t jpd-industries .
+docker run -p 8080:80 jpd-industries
+```
+
+The site will be available at http://localhost:8080
 
 ### Testing Version Selection
 Open browser developer tools and check the console for detection results:
