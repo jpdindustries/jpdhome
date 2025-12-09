@@ -1,13 +1,13 @@
-FROM nginx:alpine
+FROM httpd:alpine
 
-# Copy all static files to nginx html directory
-COPY . /usr/share/nginx/html/
+# Copy all static files to Apache htdocs directory
+COPY . /usr/local/apache2/htdocs/
 
-# Set proper ownership and permissions for nginx user
-RUN chown -R nginx:nginx /usr/share/nginx/html/ && chmod -R 755 /usr/share/nginx/html/
+# Set proper ownership and permissions for www-data user
+RUN chown -R www-data:www-data /usr/local/apache2/htdocs/ && chmod -R 755 /usr/local/apache2/htdocs/
 
 # Expose port 80
 EXPOSE 80
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Start httpd
+CMD ["httpd-foreground"]
