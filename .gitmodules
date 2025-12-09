@@ -1,6 +1,0 @@
-[submodule "base"]
-	path = base
-	url = https://github.com/jpdindustries/jpdhome.git
-[submodule "webgl"]
-	path = webgl
-	url = https://github.com/jpdindustries/jpdhome.git
