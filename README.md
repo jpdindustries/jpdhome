@@ -1,5 +1,7 @@
 # jpd.industries
 
+[![Docker](https://github.com/jpdindustries/jpdhome/actions/workflows/docker.yml/badge.svg)](https://github.com/jpdindustries/jpdhome/actions/workflows/docker.yml)
+
 A space-themed website with interactive parallax effects and automatic version selection.
 
 ![Demo GIF](base/assets/demo.gif)
@@ -103,21 +105,3 @@ You can also access `window.versionDetector.getResults()` for detailed test info
 To force a specific version, modify the URL:
 - `?version=base` - Force base version
 - `?version=webgl` - Force WebGL version (may fail if unsupported)
-
-## Browser Support
-
-### Base Version (Default Fallback)
-- All modern browsers with Canvas 2D support
-- IE11+ (with polyfills)
-- Mobile browsers
-
-### WebGL Version (High Performance)
-- Chrome 51+
-- Firefox 45+
-- Safari 10+
-- Edge 79+
-- Mobile browsers with WebGL support
-
-## License
-
-This project is part of jpd.industries.

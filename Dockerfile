@@ -14,11 +14,14 @@ RUN chmod -R 755 /app
 # --- Final Stage: Nginx Web Server ---
 FROM nginx:alpine
 
-# Copy the entire cloned application from the builder stage 
+# Copy the entire cloned application from the builder stage
 # to Nginx's default document root directory.
 COPY --from=builder /app /usr/share/nginx/html
 
-# Nginx already runs as a non-root user (nginx) and is configured 
+# Remove large demo GIF files to reduce image size
+RUN rm -f /usr/share/nginx/html/base/assets/demo.gif /usr/share/nginx/html/webgl/assets/demo.gif
+
+# Nginx already runs as a non-root user (nginx) and is configured
 # to serve files from this location. No chown/chmod is typically needed here.
 
 EXPOSE 80
