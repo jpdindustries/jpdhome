@@ -156,104 +156,127 @@ class VersionDetector {
                     return;
                 }
 
-                // Create complex test scene similar to real site with FBM noise shaders
+                // Raw WebGL shaders adapted from Three.js version
                 const vertexShaderSource = `
-                    attribute vec2 position;
+                    attribute vec3 position;
+                    attribute vec3 color;
                     attribute float size;
                     attribute float random;
+                    varying vec3 vColor;
                     varying float vRandom;
                     
                     void main() {
+                        vColor = color;
                         vRandom = random;
-                        gl_Position = vec4(position, 0.0, 1.0);
+                        gl_Position = vec4(position, 1.0);
                         gl_PointSize = size;
-                    }
-                `;
+                    }`;
 
                 const fragmentShaderSource = `
+                    precision mediump float;
                     uniform float uTime;
+                    varying vec3 vColor;
                     varying float vRandom;
                     
-                    // FBM noise functions similar to real site nebula
-                    float random(vec2 st) {
-                        return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
-                    }
-                    
-                    float noise(vec2 st) {
-                        vec2 i = floor(st);
-                        vec2 f = fract(st);
-                        float a = random(i);
-                        float b = random(i + vec2(1.0, 0.0));
-                        float c = random(i + vec2(0.0, 1.0));
-                        float d = random(i + vec2(1.0, 1.0));
-                        vec2 u = f * f * (3.0 - 2.0 * f);
-                        return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.y * u.x;
-                    }
-                    
-                    float fbm(vec2 st) {
-                        float value = 0.0;
-                        float amplitude = 0.5;
-                        for (int i = 0; i < 6; i++) {
-                            value += amplitude * noise(st);
-                            st *= 2.0;
-                            amplitude *= 0.5;
-                        }
-                        return value;
-                    }
-                    
                     void main() {
-                        vec2 st = gl_PointCoord;
-                        float d = distance(st, vec2(0.5));
+                        float d = distance(gl_PointCoord, vec2(0.5, 0.5));
                         if (d > 0.5) discard;
                         
-                        // Complex noise-based particle with twinkling
-                        float noise1 = fbm(st * 3.0 + uTime * 0.5 + vRandom * 6.28);
-                        float noise2 = fbm(st * 6.0 + uTime * 0.8 + vRandom * 3.14);
-                        float combined = noise1 * 0.7 + noise2 * 0.3;
-                        
-                        // Twinkling effect with multiple frequencies
+                        // Improved gentle twinkling with multiple frequencies (exact from real site)
                         float twinkle1 = sin(uTime * 1.5 * vRandom + vRandom * 6.28);
                         float twinkle2 = sin(uTime * 0.8 * vRandom + vRandom * 3.14);
                         float twinkle = 0.8 + 0.15 * twinkle1 + 0.05 * twinkle2;
                         
-                        float alpha = (1.0 - smoothstep(0.3, 0.5, d)) * combined * twinkle;
-                        vec3 color = mix(vec3(0.68, 0.78, 1.0), vec3(1.0, 0.96, 0.64), combined);
+                        float alpha = (1.0 - smoothstep(0.3, 0.5, d)) * twinkle;
                         
-                        gl_FragColor = vec4(color, alpha);
-                    }
-                `;
+                        gl_FragColor = vec4(vColor, alpha);
+                    }`;
 
                 const vertexShader = gl.createShader(gl.VERTEX_SHADER);
                 gl.shaderSource(vertexShader, vertexShaderSource);
                 gl.compileShader(vertexShader);
 
+                if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
+                    console.error('Vertex shader error:', gl.getShaderInfoLog(vertexShader));
+                    resolve(false);
+                    return;
+                }
+
                 const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
                 gl.shaderSource(fragmentShader, fragmentShaderSource);
                 gl.compileShader(fragmentShader);
+
+                if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
+                    console.error('Fragment shader error:', gl.getShaderInfoLog(fragmentShader));
+                    resolve(false);
+                    return;
+                }
 
                 const program = gl.createProgram();
                 gl.attachShader(program, vertexShader);
                 gl.attachShader(program, fragmentShader);
                 gl.linkProgram(program);
-                gl.useProgram(program);
 
-                // Create test particles - significantly increased to match real site complexity
-                const numParticles = 25000; // 5x increase from 5K to 25K
-                const positions = new Float32Array(numParticles * 2);
-                const sizes = new Float32Array(numParticles);
-                const randoms = new Float32Array(numParticles);
-
-                for (let i = 0; i < numParticles; i++) {
-                    positions[i * 2] = (Math.random() - 0.5) * 2;
-                    positions[i * 2 + 1] = (Math.random() - 0.5) * 2;
-                    sizes[i] = Math.random() * 2.0 + 1.0; // Variable particle sizes
-                    randoms[i] = Math.random();
+                if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                    console.error('Program link error:', gl.getProgramInfoLog(program));
+                    resolve(false);
+                    return;
                 }
 
-                // Create buffers
+                gl.useProgram(program);
+
+                // Create exact particle count from real site: 30K + 50K + 20K = 100K
+                const starLayers = [
+                    { count: 30000, size: 2, depthMin: 200, depthMax: 500, parallax: 0.05 },   // Distant layer
+                    { count: 50000, size: 3, depthMin: 400, depthMax: 700, parallax: 0.1 },     // Middle layer
+                    { count: 20000, size: 4, depthMin: 600, depthMax: 900, parallax: 0.2 }      // Near layer
+                ];
+
+                const totalParticles = starLayers.reduce((sum, layer) => sum + layer.count, 0);
+                const positions = new Float32Array(totalParticles * 3);
+                const colors = new Float32Array(totalParticles * 3);
+                const sizes = new Float32Array(totalParticles);
+                const randoms = new Float32Array(totalParticles);
+
+                let particleIndex = 0;
+                
+                starLayers.forEach(layer => {
+                    for (let i = 0; i < layer.count; i++) {
+                        const i3 = particleIndex * 3;
+                        
+                        // Position with depth (adapted for raw WebGL coordinates)
+                        positions[i3] = (Math.random() - 0.5) * 4.0;      // X: -2 to 2
+                        positions[i3 + 1] = (Math.random() - 0.5) * 4.0;  // Y: -2 to 2
+                        positions[i3 + 2] = (Math.random() * (layer.depthMax - layer.depthMin) + layer.depthMin) / 1000.0 - 1.0;
+
+                        // Color distribution exactly like real site
+                        const rand = Math.random();
+                        if (rand < 0.7) {
+                            // Blue stars (0xAEC6FF)
+                            colors[i3] = 0.68; colors[i3 + 1] = 0.78; colors[i3 + 2] = 1.0;
+                        } else if (rand < 0.9) {
+                            // Yellow stars (0xFFF4A3)
+                            colors[i3] = 1.0; colors[i3 + 1] = 0.96; colors[i3 + 2] = 0.64;
+                        } else {
+                            // Red stars (0xFFA5A5)
+                            colors[i3] = 1.0; colors[i3 + 1] = 0.65; colors[i3 + 2] = 0.65;
+                        }
+
+                        // Size calculation exactly like real site
+                        sizes[particleIndex] = (Math.random() * 0.05 + 0.35) * layer.size;
+                        randoms[particleIndex] = Math.random();
+                        particleIndex++;
+                    }
+                });
+
+                // Create and bind buffers
                 const positionBuffer = gl.createBuffer();
                 gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
                 gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+
+                const colorBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
 
                 const sizeBuffer = gl.createBuffer();
                 gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuffer);
@@ -263,33 +286,57 @@ class VersionDetector {
                 gl.bindBuffer(gl.ARRAY_BUFFER, randomBuffer);
                 gl.bufferData(gl.ARRAY_BUFFER, randoms, gl.STATIC_DRAW);
 
-                // Set up attributes
+                // Set up attributes with error checking
                 const positionLocation = gl.getAttribLocation(program, 'position');
-                gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-                gl.enableVertexAttribArray(positionLocation);
-                gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+                if (positionLocation !== -1) {
+                    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+                    gl.enableVertexAttribArray(positionLocation);
+                    gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
+                }
+
+                const colorLocation = gl.getAttribLocation(program, 'color');
+                if (colorLocation !== -1) {
+                    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+                    gl.enableVertexAttribArray(colorLocation);
+                    gl.vertexAttribPointer(colorLocation, 3, gl.FLOAT, false, 0, 0);
+                }
 
                 const sizeLocation = gl.getAttribLocation(program, 'size');
-                gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuffer);
-                gl.enableVertexAttribArray(sizeLocation);
-                gl.vertexAttribPointer(sizeLocation, 1, gl.FLOAT, false, 0, 0);
+                if (sizeLocation !== -1) {
+                    gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuffer);
+                    gl.enableVertexAttribArray(sizeLocation);
+                    gl.vertexAttribPointer(sizeLocation, 1, gl.FLOAT, false, 0, 0);
+                }
 
                 const randomLocation = gl.getAttribLocation(program, 'random');
-                gl.bindBuffer(gl.ARRAY_BUFFER, randomBuffer);
-                gl.enableVertexAttribArray(randomLocation);
-                gl.vertexAttribPointer(randomLocation, 1, gl.FLOAT, false, 0, 0);
+                if (randomLocation !== -1) {
+                    gl.bindBuffer(gl.ARRAY_BUFFER, randomBuffer);
+                    gl.enableVertexAttribArray(randomLocation);
+                    gl.vertexAttribPointer(randomLocation, 1, gl.FLOAT, false, 0, 0);
+                }
 
-                gl.clearColor(0.06, 0.06, 0.11, 1.0); // Dark space-like background
+                gl.clearColor(0.035, 0.0, 0.115, 1.0); // Real site background color
                 gl.clear(gl.COLOR_BUFFER_BIT);
 
-                // Enable additive blending for more realistic rendering
+                // Enable additive blending exactly like real site
                 gl.enable(gl.BLEND);
                 gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+                gl.disable(gl.DEPTH_TEST); // Disable depth test for particle rendering
 
-                // Run performance test for longer duration
+                // Mouse interaction setup
+                const mouse = { x: 0, y: 0 };
+
+                // Mouse move handler
+                const handleMouseMove = (event) => {
+                    mouse.x = (event.clientX - window.innerWidth / 2) / window.innerWidth;
+                    mouse.y = -(event.clientY - window.innerHeight / 2) / window.innerHeight;
+                };
+                document.addEventListener('mousemove', handleMouseMove);
+
+                // Run performance test
                 let frameCount = 0;
                 const startTime = performance.now();
-                const testDuration = 3000; // 3 seconds for more stable measurement
+                const testDuration = 4000; // 4 seconds for accurate measurement
                 let lastUpdateTime = startTime;
 
                 const animate = () => {
@@ -297,16 +344,15 @@ class VersionDetector {
                     const elapsed = currentTime - startTime;
 
                     if (elapsed < testDuration) {
-                        // Update time uniform for shader animation
-                        const time = elapsed * 0.001;
-                        gl.uniform1f(gl.getUniformLocation(program, 'uTime'), time);
+                        // Update time uniform
+                        gl.uniform1f(gl.getUniformLocation(program, 'uTime'), elapsed * 0.001);
 
                         gl.clear(gl.COLOR_BUFFER_BIT);
-                        gl.drawArrays(gl.POINTS, 0, numParticles);
+                        gl.drawArrays(gl.POINTS, 0, totalParticles);
 
                         frameCount++;
 
-                        // Update meter every 100ms for smooth display
+                        // Update meter every 100ms
                         if (currentTime - lastUpdateTime >= 100) {
                             const currentFps = frameCount / (elapsed / 1000);
                             const progress = elapsed / testDuration;
@@ -316,13 +362,16 @@ class VersionDetector {
 
                         requestAnimationFrame(animate);
                     } else {
-                        // Final update with complete results
+                        // Cleanup mouse listener
+                        document.removeEventListener('mousemove', handleMouseMove);
+
+                        // Final results
                         const fps = frameCount / (elapsed / 1000);
                         this.updatePerformanceMeter(fps, 1.0);
-                        console.log(`Performance test: ${fps.toFixed(1)} FPS with ${numParticles} complex particles`);
+                        console.log(`Performance test: ${fps.toFixed(1)} FPS with ${totalParticles} particles (exact real site load)`);
 
-                        // Adjusted FPS requirement - lower threshold for more demanding test
-                        const passed = fps >= 20; // Reduced from 30 to 20 FPS due to increased complexity
+                        // Realistic FPS requirement for 100K particles
+                        const passed = fps >= 15; // Lower threshold for 100K particle load
                         resolve(passed);
                     }
                 };

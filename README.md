@@ -4,7 +4,7 @@
 
 A space-themed website with interactive parallax effects and automatic version selection.
 
-![Demo GIF](base/assets/demo.gif)
+![Demo GIF](assets/demo.gif)
 
 ## Overview
 
