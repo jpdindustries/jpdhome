@@ -4,25 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>jpd.industries</title>
-    <link rel="icon" type="image/png" href="assets/jpdico.png">
+    <link rel="icon" type="image/png" href="base/assets/jpdico.png">
     <meta name="theme-color" content="#FF0000">
-    <link rel="stylesheet" href="styles/main.css">
-    <link rel="stylesheet" href="styles/animations.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bitcount+Prop+Single:wght@100..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="shared/styles/loading.css">
 </head>
 <body>
-    <canvas id="nebula-canvas"></canvas>
-    <canvas id="stars-canvas"></canvas>
-    <div id="logo-container">
-        <img src="assets/jpdlogo.png" alt="JPD Logo" id="logo">
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Detecting capabilities...</div>
+        <div class="loading-version">jpd.industries</div>
     </div>
 
-    <div id="space-object-container">
-        <img src="assets/jpdaustronaut.png" alt="Floating Astronaut" id="astronaut" class="space-object">
-        <img src="assets/meteorite.png" alt="Floating Meteorite" id="meteorite" class="space-object">
-        <img src="assets/rocket.png" alt="Flying Rocket" id="rocket" class="space-object">
-        <img src="assets/satellite.png" alt="Floating Satellite" id="satellite" class="space-object">
-    </div>
-
-    <script src="scripts/main.js"></script>
+    <script src="scripts/detector.js"></script>
 </body>
 </html>
