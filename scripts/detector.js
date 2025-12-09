@@ -213,9 +213,9 @@ class VersionDetector {
         // Load Three.js
         await this.loadScript('https://unpkg.com/three@0.164.1/build/three.module.js', 'three');
 
-        // Load WebGL styles
-        await this.loadStylesheet('webgl/styles/main.css');
-        await this.loadStylesheet('webgl/styles/animations.css');
+        // Load WebGL styles (non-blocking)
+        this.loadStylesheet('webgl/styles/main.css');
+        this.loadStylesheet('webgl/styles/animations.css');
 
         // Update HTML content for WebGL
         this.updateHTMLForWebGL();
