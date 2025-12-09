@@ -9,12 +9,24 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bitcount+Prop+Single:wght@100..900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="shared/styles/loading.css">
+    <link rel="stylesheet" href="styles/loading.css">
 </head>
 <body>
     <div id="loading-screen" class="loading-screen">
-        <div class="loading-spinner"></div>
         <div class="loading-text">Detecting capabilities...</div>
+        <div id="gpu-info" class="gpu-info" style="display: none;"></div>
+        <div id="performance-meter" class="performance-meter" style="display: none;">
+            <div class="fps-gauge">
+                <svg class="fps-gauge-svg" width="120" height="120" viewBox="0 0 120 120">
+                    <circle cx="60" cy="60" r="50" fill="none" stroke="#333" stroke-width="8" class="fps-gauge-background"></circle>
+                    <circle id="fps-gauge-fill" cx="60" cy="60" r="50" fill="none" stroke="#FF0000" stroke-width="8" stroke-linecap="round" stroke-dasharray="314.16" stroke-dashoffset="314.16" class="fps-gauge-fill" transform="rotate(90 60 60)"></circle>
+                </svg>
+                <div class="fps-value"><span id="fps-value">--</span></div>
+            </div>
+            <div class="progress-bar">
+                <div id="progress-fill" class="progress-fill"></div>
+            </div>
+        </div>
         <div class="loading-version">jpd.industries</div>
     </div>
 
