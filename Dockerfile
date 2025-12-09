@@ -1,16 +1,16 @@
-FROM httpd:alpine
+# Multi-stage build to handle submodules
+FROM alpine:latest AS builder
 
-# Install git for submodule handling
 RUN apk add --no-cache git
 
-# Copy all static files to Apache htdocs directory
-COPY . /usr/local/apache2/htdocs/
+RUN git clone --recursive -b main https://github.com/jpdindustries/jpdhome.git /app
 
-# Set proper ownership and permissions for www-data user
+FROM httpd:alpine
+
+COPY --from=builder /app /usr/local/apache2/htdocs/
+
 RUN chown -R www-data:www-data /usr/local/apache2/htdocs/ && chmod -R 755 /usr/local/apache2/htdocs/
 
-# Expose port 80
 EXPOSE 80
 
-# Start httpd
 CMD ["httpd-foreground"]
