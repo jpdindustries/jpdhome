@@ -49,6 +49,7 @@ class VersionDetector {
             if (!ext) return false;
 
             const renderer = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL).toLowerCase();
+            this.gpuRenderer = renderer; // Store renderer info for display
 
             // Exclude integrated graphics (Intel HD/UHD, AMD Vega, etc.)
             const integratedPatterns = [
@@ -94,9 +95,12 @@ class VersionDetector {
             return this.selectedVersion;
         }
 
-        // Step 2: Show GPU info and run performance test
-        console.log('WebGL supported, running performance test...');
+        // Step 2: Check GPU quality and show info
+        this.goodGPU = this.checkGPUQuality();
         this.showGPUInfo();
+        
+        // Step 3: Run performance test
+        console.log('Running performance test...');
         this.showPerformanceMeter();
         this.performanceTestPassed = await this.runPerformanceTest();
         this.hidePerformanceMeter();
@@ -143,27 +147,79 @@ class VersionDetector {
         return new Promise((resolve) => {
             try {
                 const canvas = document.createElement('canvas');
-                canvas.width = 400;
-                canvas.height = 300;
-                const gl = canvas.getContext('webgl');
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                const gl = canvas.getContext('webgl', { antialias: true, alpha: true });
 
                 if (!gl) {
                     resolve(false);
                     return;
                 }
 
-                // Create a simple test scene with many particles
+                // Create complex test scene similar to real site with FBM noise shaders
                 const vertexShaderSource = `
                     attribute vec2 position;
+                    attribute float size;
+                    attribute float random;
+                    varying float vRandom;
+                    
                     void main() {
+                        vRandom = random;
                         gl_Position = vec4(position, 0.0, 1.0);
-                        gl_PointSize = 2.0;
+                        gl_PointSize = size;
                     }
                 `;
 
                 const fragmentShaderSource = `
+                    uniform float uTime;
+                    varying float vRandom;
+                    
+                    // FBM noise functions similar to real site nebula
+                    float random(vec2 st) {
+                        return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+                    }
+                    
+                    float noise(vec2 st) {
+                        vec2 i = floor(st);
+                        vec2 f = fract(st);
+                        float a = random(i);
+                        float b = random(i + vec2(1.0, 0.0));
+                        float c = random(i + vec2(0.0, 1.0));
+                        float d = random(i + vec2(1.0, 1.0));
+                        vec2 u = f * f * (3.0 - 2.0 * f);
+                        return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.y * u.x;
+                    }
+                    
+                    float fbm(vec2 st) {
+                        float value = 0.0;
+                        float amplitude = 0.5;
+                        for (int i = 0; i < 6; i++) {
+                            value += amplitude * noise(st);
+                            st *= 2.0;
+                            amplitude *= 0.5;
+                        }
+                        return value;
+                    }
+                    
                     void main() {
-                        gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+                        vec2 st = gl_PointCoord;
+                        float d = distance(st, vec2(0.5));
+                        if (d > 0.5) discard;
+                        
+                        // Complex noise-based particle with twinkling
+                        float noise1 = fbm(st * 3.0 + uTime * 0.5 + vRandom * 6.28);
+                        float noise2 = fbm(st * 6.0 + uTime * 0.8 + vRandom * 3.14);
+                        float combined = noise1 * 0.7 + noise2 * 0.3;
+                        
+                        // Twinkling effect with multiple frequencies
+                        float twinkle1 = sin(uTime * 1.5 * vRandom + vRandom * 6.28);
+                        float twinkle2 = sin(uTime * 0.8 * vRandom + vRandom * 3.14);
+                        float twinkle = 0.8 + 0.15 * twinkle1 + 0.05 * twinkle2;
+                        
+                        float alpha = (1.0 - smoothstep(0.3, 0.5, d)) * combined * twinkle;
+                        vec3 color = mix(vec3(0.68, 0.78, 1.0), vec3(1.0, 0.96, 0.64), combined);
+                        
+                        gl_FragColor = vec4(color, alpha);
                     }
                 `;
 
@@ -181,30 +237,59 @@ class VersionDetector {
                 gl.linkProgram(program);
                 gl.useProgram(program);
 
-                // Create test particles (reduced for faster detection)
-                const numParticles = 5000;
+                // Create test particles - significantly increased to match real site complexity
+                const numParticles = 25000; // 5x increase from 5K to 25K
                 const positions = new Float32Array(numParticles * 2);
+                const sizes = new Float32Array(numParticles);
+                const randoms = new Float32Array(numParticles);
 
                 for (let i = 0; i < numParticles; i++) {
                     positions[i * 2] = (Math.random() - 0.5) * 2;
                     positions[i * 2 + 1] = (Math.random() - 0.5) * 2;
+                    sizes[i] = Math.random() * 2.0 + 1.0; // Variable particle sizes
+                    randoms[i] = Math.random();
                 }
 
-                const buffer = gl.createBuffer();
-                gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+                // Create buffers
+                const positionBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
                 gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
 
+                const sizeBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER, sizes, gl.STATIC_DRAW);
+
+                const randomBuffer = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, randomBuffer);
+                gl.bufferData(gl.ARRAY_BUFFER, randoms, gl.STATIC_DRAW);
+
+                // Set up attributes
                 const positionLocation = gl.getAttribLocation(program, 'position');
+                gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
                 gl.enableVertexAttribArray(positionLocation);
                 gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
-                gl.clearColor(0, 0, 0, 1);
+                const sizeLocation = gl.getAttribLocation(program, 'size');
+                gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuffer);
+                gl.enableVertexAttribArray(sizeLocation);
+                gl.vertexAttribPointer(sizeLocation, 1, gl.FLOAT, false, 0, 0);
+
+                const randomLocation = gl.getAttribLocation(program, 'random');
+                gl.bindBuffer(gl.ARRAY_BUFFER, randomBuffer);
+                gl.enableVertexAttribArray(randomLocation);
+                gl.vertexAttribPointer(randomLocation, 1, gl.FLOAT, false, 0, 0);
+
+                gl.clearColor(0.06, 0.06, 0.11, 1.0); // Dark space-like background
                 gl.clear(gl.COLOR_BUFFER_BIT);
 
-                // Run performance test for 1 second
+                // Enable additive blending for more realistic rendering
+                gl.enable(gl.BLEND);
+                gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+
+                // Run performance test for longer duration
                 let frameCount = 0;
                 const startTime = performance.now();
-                const testDuration = 2000; // 2 seconds
+                const testDuration = 3000; // 3 seconds for more stable measurement
                 let lastUpdateTime = startTime;
 
                 const animate = () => {
@@ -212,9 +297,9 @@ class VersionDetector {
                     const elapsed = currentTime - startTime;
 
                     if (elapsed < testDuration) {
-                        // Rotate particles slightly for animation
-                        const angle = elapsed * 0.001;
-                        gl.uniform1f(gl.getUniformLocation(program, 'time'), angle);
+                        // Update time uniform for shader animation
+                        const time = elapsed * 0.001;
+                        gl.uniform1f(gl.getUniformLocation(program, 'uTime'), time);
 
                         gl.clear(gl.COLOR_BUFFER_BIT);
                         gl.drawArrays(gl.POINTS, 0, numParticles);
@@ -234,10 +319,10 @@ class VersionDetector {
                         // Final update with complete results
                         const fps = frameCount / (elapsed / 1000);
                         this.updatePerformanceMeter(fps, 1.0);
-                        console.log(`Performance test: ${fps.toFixed(1)} FPS`);
+                        console.log(`Performance test: ${fps.toFixed(1)} FPS with ${numParticles} complex particles`);
 
-                        // Require at least 30 FPS for WebGL version
-                        const passed = fps >= 30;
+                        // Adjusted FPS requirement - lower threshold for more demanding test
+                        const passed = fps >= 20; // Reduced from 30 to 20 FPS due to increased complexity
                         resolve(passed);
                     }
                 };
@@ -259,6 +344,10 @@ class VersionDetector {
         const loadingText = loadingScreen.querySelector('.loading-text');
 
         try {
+            // Fade out current content first
+            document.body.classList.add('content-fade-out');
+            await new Promise(resolve => setTimeout(resolve, 300));
+
             if (version === 'webgl') {
                 loadingText.textContent = 'Loading WebGL version...';
                 await this.loadWebGLVersion();
@@ -267,10 +356,19 @@ class VersionDetector {
                 await this.loadBaseVersion();
             }
 
+            // Fade in new content
+            document.body.classList.remove('content-fade-out');
+            document.body.classList.add('content-fade-in');
+            
+            // Wait for content to fade in
+            await new Promise(resolve => setTimeout(resolve, 100));
+
             // Fade out loading screen
             loadingScreen.classList.add('fade-out');
             setTimeout(() => {
                 loadingScreen.style.display = 'none';
+                // Remove content fade-in class after loading screen is hidden
+                document.body.classList.remove('content-fade-in');
             }, 500);
 
         } catch (error) {
@@ -279,9 +377,12 @@ class VersionDetector {
             if (version === 'webgl') {
                 console.log('Falling back to base version due to load error');
                 await this.loadBaseVersion();
+                document.body.classList.remove('content-fade-out');
+                document.body.classList.add('content-fade-in');
                 loadingScreen.classList.add('fade-out');
                 setTimeout(() => {
                     loadingScreen.style.display = 'none';
+                    document.body.classList.remove('content-fade-in');
                 }, 500);
             }
         }
@@ -412,33 +513,53 @@ class VersionDetector {
     }
 
     /**
-     * Show GPU information on loading screen
+     * Show GPU information on loading screen with fade transition
      */
-    showGPUInfo() {
+    async showGPUInfo() {
         const gpuInfoElement = document.getElementById('gpu-info');
         if (gpuInfoElement && this.gpuRenderer) {
             gpuInfoElement.textContent = `GPU: ${this.gpuRenderer}`;
+            // Add fade-in transition
+            gpuInfoElement.style.transition = 'opacity 0.3s ease-out';
+            gpuInfoElement.style.opacity = '0';
             gpuInfoElement.style.display = 'block';
+            
+            // Wait for transition to complete
+            await new Promise(resolve => setTimeout(resolve, 50));
+            gpuInfoElement.style.opacity = '1';
         }
     }
 
     /**
-     * Show performance meter on loading screen
+     * Show performance meter on loading screen with fade transition
      */
-    showPerformanceMeter() {
+    async showPerformanceMeter() {
         const meterElement = document.getElementById('performance-meter');
         if (meterElement) {
+            // Add fade-in transition
+            meterElement.style.transition = 'opacity 0.3s ease-out';
+            meterElement.style.opacity = '0';
             meterElement.style.display = 'block';
+            
+            // Wait for transition to complete
+            await new Promise(resolve => setTimeout(resolve, 50));
+            meterElement.style.opacity = '1';
             this.performanceMeterVisible = true;
         }
     }
 
     /**
-     * Hide performance meter
+     * Hide performance meter with fade transition
      */
-    hidePerformanceMeter() {
+    async hidePerformanceMeter() {
         const meterElement = document.getElementById('performance-meter');
         if (meterElement) {
+            // Add fade-out transition
+            meterElement.style.transition = 'opacity 0.3s ease-out';
+            meterElement.style.opacity = '0';
+            
+            // Wait for transition to complete before hiding
+            await new Promise(resolve => setTimeout(resolve, 300));
             meterElement.style.display = 'none';
             this.performanceMeterVisible = false;
         }

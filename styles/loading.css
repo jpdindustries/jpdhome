@@ -14,6 +14,20 @@
     transition: opacity 0.5s ease-out;
 }
 
+/* Content transition styles */
+body {
+    transition: opacity 0.3s ease-out;
+    background-color: #16161D; /* Ensure consistent background color */
+}
+
+body.content-fade-out {
+    opacity: 0;
+}
+
+body.content-fade-in {
+    opacity: 1;
+}
+
 .loading-screen.fade-out {
     opacity: 0;
 }
