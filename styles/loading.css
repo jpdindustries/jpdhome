@@ -1,0 +1,74 @@
+/* Loading screen styles for shared use */
+.loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #16161D;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    transition: opacity 0.5s ease-out;
+}
+
+.loading-screen.fade-out {
+    opacity: 0;
+}
+
+.loading-text {
+    color: white;
+    font-family: 'Bitcount Prop Single', sans-serif;
+    font-size: 16px;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.gpu-info {
+    color: rgba(255, 255, 255, 0.8);
+    font-family: 'Bitcount Prop Single', sans-serif;
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+.loading-version {
+    color: rgba(255, 255, 255, 0.7);
+    font-family: 'Bitcount Prop Single', sans-serif;
+    font-size: 12px;
+}
+
+.fps-gauge {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.fps-gauge-svg {
+    position: relative;
+}
+
+.fps-gauge-background {
+    stroke: #333;
+}
+
+.fps-gauge-fill {
+    stroke: #FF0000;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.3s ease-out;
+}
+
+.fps-value {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-family: 'Bitcount Prop Single', sans-serif;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+}

@@ -6,7 +6,7 @@ RUN apk add --no-cache git
 
 # Clone the main repository and all submodules
 # The submodules are checked out to the commit recorded in the 'main' branch's index.
-RUN git clone --recursive -b multi https://github.com/jpdindustries/jpdhome.git /app
+RUN git clone --recursive -b main https://github.com/jpdindustries/jpdhome.git /app
 
 # Ensure correct permissions for the cloned content
 RUN chmod -R 755 /app

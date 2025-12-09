@@ -7,8 +7,75 @@ class VersionDetector {
     constructor() {
         this.webglSupported = false;
         this.performanceTestPassed = false;
+        this.isMobile = false;
+        this.goodGPU = false;
         this.selectedVersion = 'base'; // default fallback
         this.testResults = {};
+        this.gpuRenderer = '';
+        this.performanceMeterVisible = false;
+    }
+
+    /**
+     * Check if the device is mobile
+     */
+    isMobileDevice() {
+        // Check user agent for mobile keywords
+        const userAgent = navigator.userAgent.toLowerCase();
+        const mobileKeywords = ['mobile', 'android', 'iphone', 'ipad', 'ipod', 'blackberry', 'windows phone'];
+
+        // Check for touch capability
+        const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+        // Check screen size (typical mobile breakpoint)
+        const isSmallScreen = window.innerWidth <= 768;
+
+        // Check for mobile-specific navigator properties
+        const isMobileNavigator = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        return mobileKeywords.some(keyword => userAgent.includes(keyword)) || hasTouch || isSmallScreen || isMobileNavigator;
+    }
+
+    /**
+     * Check if the GPU is considered "good" (discrete GPU, not integrated)
+     */
+    checkGPUQuality() {
+        try {
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+            if (!gl) return false;
+
+            const ext = gl.getExtension('WEBGL_debug_renderer_info');
+            if (!ext) return false;
+
+            const renderer = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL).toLowerCase();
+
+            // Exclude integrated graphics (Intel HD/UHD, AMD Vega, etc.)
+            const integratedPatterns = [
+                /intel.*hd/i,
+                /intel.*uhd/i,
+                /intel.*integrated/i,
+                /amd.*vega/i,
+                /radeon.*vega/i,
+                /microsoft.*basic/i,
+                /vmware/i,
+                /virtualbox/i,
+                /qemu/i
+            ];
+
+            // Check if renderer matches integrated graphics
+            const isIntegrated = integratedPatterns.some(pattern => pattern.test(renderer));
+
+            // Consider discrete GPUs as good (NVIDIA GeForce, AMD Radeon, etc.)
+            const isDiscrete = /nvidia|geforce|radeon|amd|ati/i.test(renderer) && !isIntegrated;
+
+            console.log('GPU Renderer:', renderer, 'Is Discrete:', isDiscrete);
+
+            return isDiscrete;
+        } catch (e) {
+            console.warn('GPU quality check failed:', e);
+            return false;
+        }
     }
 
     /**
@@ -27,9 +94,12 @@ class VersionDetector {
             return this.selectedVersion;
         }
 
-        // Step 2: Run performance test
+        // Step 2: Show GPU info and run performance test
         console.log('WebGL supported, running performance test...');
+        this.showGPUInfo();
+        this.showPerformanceMeter();
         this.performanceTestPassed = await this.runPerformanceTest();
+        this.hidePerformanceMeter();
         this.testResults.performance = this.performanceTestPassed;
 
         if (this.performanceTestPassed) {
@@ -134,7 +204,8 @@ class VersionDetector {
                 // Run performance test for 1 second
                 let frameCount = 0;
                 const startTime = performance.now();
-                const testDuration = 1000; // 1 second
+                const testDuration = 2000; // 2 seconds
+                let lastUpdateTime = startTime;
 
                 const animate = () => {
                     const currentTime = performance.now();
@@ -149,10 +220,20 @@ class VersionDetector {
                         gl.drawArrays(gl.POINTS, 0, numParticles);
 
                         frameCount++;
+
+                        // Update meter every 100ms for smooth display
+                        if (currentTime - lastUpdateTime >= 100) {
+                            const currentFps = frameCount / (elapsed / 1000);
+                            const progress = elapsed / testDuration;
+                            this.updatePerformanceMeter(currentFps, progress);
+                            lastUpdateTime = currentTime;
+                        }
+
                         requestAnimationFrame(animate);
                     } else {
-                        // Calculate FPS
+                        // Final update with complete results
                         const fps = frameCount / (elapsed / 1000);
+                        this.updatePerformanceMeter(fps, 1.0);
                         console.log(`Performance test: ${fps.toFixed(1)} FPS`);
 
                         // Require at least 30 FPS for WebGL version
@@ -331,6 +412,68 @@ class VersionDetector {
     }
 
     /**
+     * Show GPU information on loading screen
+     */
+    showGPUInfo() {
+        const gpuInfoElement = document.getElementById('gpu-info');
+        if (gpuInfoElement && this.gpuRenderer) {
+            gpuInfoElement.textContent = `GPU: ${this.gpuRenderer}`;
+            gpuInfoElement.style.display = 'block';
+        }
+    }
+
+    /**
+     * Show performance meter on loading screen
+     */
+    showPerformanceMeter() {
+        const meterElement = document.getElementById('performance-meter');
+        if (meterElement) {
+            meterElement.style.display = 'block';
+            this.performanceMeterVisible = true;
+        }
+    }
+
+    /**
+     * Hide performance meter
+     */
+    hidePerformanceMeter() {
+        const meterElement = document.getElementById('performance-meter');
+        if (meterElement) {
+            meterElement.style.display = 'none';
+            this.performanceMeterVisible = false;
+        }
+    }
+
+    /**
+     * Update performance meter with current FPS and progress
+     */
+    updatePerformanceMeter(fps, progress) {
+        if (!this.performanceMeterVisible) return;
+
+        const fpsElement = document.getElementById('fps-value');
+        const progressFill = document.getElementById('progress-fill');
+        const gaugeFill = document.getElementById('fps-gauge-fill');
+
+        if (fpsElement) {
+            fpsElement.textContent = fps.toFixed(1);
+        }
+
+        if (progressFill) {
+            progressFill.style.width = `${progress * 100}%`;
+        }
+
+        // Update circular gauge (0-300 FPS range)
+        if (gaugeFill) {
+            const maxFps = 244;
+            const normalizedFps = Math.min(fps, maxFps);
+            const percentage = normalizedFps / maxFps;
+            const circumference = 2 * Math.PI * 50; // radius = 50
+            const offset = circumference - (percentage * circumference);
+            gaugeFill.style.strokeDashoffset = offset;
+        }
+    }
+
+    /**
      * Get test results for debugging
      */
     getResults() {
@@ -338,7 +481,8 @@ class VersionDetector {
             selectedVersion: this.selectedVersion,
             webglSupported: this.webglSupported,
             performanceTestPassed: this.performanceTestPassed,
-            testResults: this.testResults
+            testResults: this.testResults,
+            gpuRenderer: this.gpuRenderer
         };
     }
 }
