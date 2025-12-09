@@ -2,4 +2,4 @@ services:
   webserver:
     image: ghcr.io/jpdindustries/jpdhome:multi
     ports:
-      - "8080:80"
+      - 8080:80
