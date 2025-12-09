@@ -1,0 +1,8 @@
+[submodule "base"]
+	path = base
+	url = https://github.com/jpdindustries/jpdhome.git
+	branch = base
+[submodule "webgl"]
+	path = webgl
+	url = https://github.com/jpdindustries/jpdhome.git
+	branch = webgl
