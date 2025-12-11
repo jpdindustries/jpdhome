@@ -560,21 +560,26 @@ class VersionDetector {
     /**
      * Load and execute base script, simulating DOMContentLoaded
      */
-    async loadAndExecuteBaseScript() {
+    loadAndExecuteBaseScript() {
         return new Promise(async (resolve, reject) => {
             try {
                 // Fetch the script content
                 const response = await fetch('base/scripts/main.js');
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch base script: ${response.status} ${response.statusText}`);
+                }
                 const scriptText = await response.text();
                 
                 // Wrap the script in an immediately invoked function that simulates DOMContentLoaded
                 // We replace the DOMContentLoaded listener with immediate execution
+                // This regex handles various formatting styles of the event listener
                 const wrappedScript = scriptText.replace(
-                    /document\.addEventListener\s*\(\s*['"]DOMContentLoaded['"]\s*,\s*\(\s*\)\s*=>\s*{/,
+                    /document\.addEventListener\s*\(\s*['"]DOMContentLoaded['"]\s*,\s*(?:\(\s*\)\s*=>|function\s*\(\s*\))\s*{/,
                     '(function() {'
                 );
                 
                 // Add closing for the wrapper and immediate invocation
+                // Match the closing pattern more flexibly
                 const executableScript = wrappedScript.replace(/}\s*\)\s*;?\s*$/, '})();');
                 
                 // Create and execute the script
