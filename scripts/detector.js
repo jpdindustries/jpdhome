@@ -460,11 +460,12 @@ class VersionDetector {
         await this.loadStylesheet('base/styles/main.css');
         await this.loadStylesheet('base/styles/animations.css');
 
-        // Load base script
-        await this.loadScript('base/scripts/main.js');
-
         // Update HTML content for base
         this.updateHTMLForBase();
+
+        // Load and execute base script after HTML is updated
+        // We need to load the script text and evaluate it, since DOMContentLoaded has already fired
+        await this.loadAndExecuteBaseScript();
     }
 
     /**
@@ -554,11 +555,44 @@ class VersionDetector {
                 <img src="base/assets/satellite.png" alt="Floating Satellite" id="satellite" class="space-object">
             </div>
         `;
+    }
 
-        // Load base script
-        const script = document.createElement('script');
-        script.src = 'base/scripts/main.js';
-        document.body.appendChild(script);
+    /**
+     * Load and execute base script, simulating DOMContentLoaded
+     */
+    loadAndExecuteBaseScript() {
+        return new Promise(async (resolve, reject) => {
+            try {
+                // Fetch the script content
+                const response = await fetch('base/scripts/main.js');
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch base script: ${response.status} ${response.statusText}`);
+                }
+                const scriptText = await response.text();
+                
+                // Wrap the script in an immediately invoked function that simulates DOMContentLoaded
+                // We replace the DOMContentLoaded listener with immediate execution
+                // This regex handles various formatting styles of the event listener
+                const wrappedScript = scriptText.replace(
+                    /document\.addEventListener\s*\(\s*['"]DOMContentLoaded['"]\s*,\s*(?:\(\s*\)\s*=>|function\s*\(\s*\))\s*{/,
+                    '(function() {'
+                );
+                
+                // Add closing for the wrapper and immediate invocation
+                // Match the closing pattern more flexibly
+                const executableScript = wrappedScript.replace(/}\s*\)\s*;?\s*$/, '})();');
+                
+                // Create and execute the script
+                const script = document.createElement('script');
+                script.textContent = executableScript;
+                document.body.appendChild(script);
+                
+                resolve();
+            } catch (error) {
+                console.error('Failed to load base script:', error);
+                reject(error);
+            }
+        });
     }
 
     /**
