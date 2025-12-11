@@ -371,7 +371,7 @@ class VersionDetector {
                         console.log(`Performance test: ${fps.toFixed(1)} FPS with ${totalParticles} particles (exact real site load)`);
 
                         // Realistic FPS requirement for 100K particles
-                        const passed = fps >= 15; // Lower threshold for 100K particle load
+                        const passed = fps > 100; // Threshold: benchmark score must exceed 100
                         resolve(passed);
                     }
                 };
