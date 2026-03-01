@@ -112,7 +112,7 @@ class VersionDetector {
     const versionOverride = urlParams.get("v");
     if (
       versionOverride &&
-      ["base", "webgl", "retro", "retro2"].includes(versionOverride)
+      ["base", "webgl", "retro", "rgb"].includes(versionOverride)
     ) {
       console.log(`Version overridden by URL parameter: ${versionOverride}`);
       this.selectedVersion = versionOverride;
@@ -312,7 +312,7 @@ class VersionDetector {
             positions[i3 + 2] =
               (Math.random() * (layer.depthMax - layer.depthMin) +
                 layer.depthMin) /
-                1000.0 -
+              1000.0 -
               1.0;
 
             // Color distribution exactly like real site
@@ -480,9 +480,9 @@ class VersionDetector {
       } else if (version === "retro") {
         loadingText.textContent = "Loading Retro version...";
         await this.loadRetroVersion();
-      } else if (version === "retro2") {
-        loadingText.textContent = "Loading Retro 2 version...";
-        await this.loadRetro2Version();
+      } else if (version === "rgb") {
+        loadingText.textContent = "Loading RGB version...";
+        await this.loadRGBVersion();
       } else {
         loadingText.textContent = "Loading base version...";
         await this.loadBaseVersion();
@@ -572,18 +572,18 @@ class VersionDetector {
   }
 
   /**
-   * Load retro2 version assets
+   * Load rgb version assets
    */
-  async loadRetro2Version() {
+  async loadRGBVersion() {
     // Load retro styles
-    await this.loadStylesheet("retro2/styles/main.css");
-    await this.loadStylesheet("retro2/styles/animations.css");
+    await this.loadStylesheet("rgb/styles/main.css");
+    await this.loadStylesheet("rgb/styles/animations.css");
 
-    // Update HTML content for retro2
-    this.updateHTMLForRetro2();
+    // Update HTML content for rgb
+    this.updateHTMLForRGB();
 
-    // Load and execute retro2 script after HTML is updated
-    await this.loadAndExecuteRetro2Script();
+    // Load and execute rgb script after HTML is updated
+    await this.loadAndExecuteRGBScript();
   }
 
   /**
@@ -698,23 +698,23 @@ class VersionDetector {
   }
 
   /**
-   * Update HTML for retro2 version
+   * Update HTML for rgb version
    */
-  updateHTMLForRetro2() {
+  updateHTMLForRGB() {
     const body = document.body;
 
     body.innerHTML = `
             <canvas id="nebula-canvas"></canvas>
             <canvas id="stars-canvas"></canvas>
             <div id="logo-container">
-                <img src="retro2/assets/jpdlogo.png" alt="JPD Logo" id="logo">
+                <img src="rgb/assets/jpdlogo.png" alt="JPD Logo" id="logo">
             </div>
 
             <div id="space-object-container">
-                <img src="retro2/assets/jpdaustronaut.png" alt="Floating Astronaut" id="astronaut" class="space-object">
-                <img src="retro2/assets/meteorite.png" alt="Floating Meteorite" id="meteorite" class="space-object">
-                <img src="retro2/assets/rocket.png" alt="Flying Rocket" id="rocket" class="space-object">
-                <img src="retro2/assets/satellite.png" alt="Floating Satellite" id="satellite" class="space-object">
+                <img src="rgb/assets/jpdaustronaut.png" alt="Floating Astronaut" id="astronaut" class="space-object">
+                <img src="rgb/assets/meteorite.png" alt="Floating Meteorite" id="meteorite" class="space-object">
+                <img src="rgb/assets/rocket.png" alt="Flying Rocket" id="rocket" class="space-object">
+                <img src="rgb/assets/satellite.png" alt="Floating Satellite" id="satellite" class="space-object">
             </div>
         `;
   }
@@ -798,15 +798,15 @@ class VersionDetector {
   }
 
   /**
-   * Load and execute retro2 script, simulating DOMContentLoaded
+   * Load and execute rgb script, simulating DOMContentLoaded
    */
-  loadAndExecuteRetro2Script() {
+  loadAndExecuteRGBScript() {
     return new Promise(async (resolve, reject) => {
       try {
-        const response = await fetch("retro2/scripts/main.js");
+        const response = await fetch("rgb/scripts/main.js");
         if (!response.ok) {
           throw new Error(
-            `Failed to fetch retro2 script: ${response.status} ${response.statusText} `,
+            `Failed to fetch rgb script: ${response.status} ${response.statusText} `,
           );
         }
         const scriptText = await response.text();
@@ -826,7 +826,7 @@ class VersionDetector {
 
         resolve();
       } catch (error) {
-        console.error("Failed to load retro2 script:", error);
+        console.error("Failed to load rgb script:", error);
         reject(error);
       }
     });
@@ -927,7 +927,7 @@ class VersionDetector {
     toggleContainer.style.bottom = "20px";
     toggleContainer.style.right = "20px";
     toggleContainer.style.zIndex = "1000";
-    toggleContainer.style.opacity = "0.3";
+    toggleContainer.style.opacity = "0.15";
     toggleContainer.style.border = "1px solid #FF0000";
     toggleContainer.style.borderRadius = "5px";
     toggleContainer.style.padding = "5px";
@@ -943,7 +943,7 @@ class VersionDetector {
     });
 
     toggleContainer.addEventListener("mouseleave", () => {
-      toggleContainer.style.opacity = "0.3";
+      toggleContainer.style.opacity = "0.15";
     });
 
     const createButton = (vName) => {
@@ -980,11 +980,24 @@ class VersionDetector {
       window.location.href = url.toString();
     };
 
+    const closeBtn = document.createElement("button");
+    closeBtn.textContent = "✕";
+    closeBtn.style.background = "transparent";
+    closeBtn.style.color = "#FFF";
+    closeBtn.style.border = "none";
+    closeBtn.style.padding = "3px 5px";
+    closeBtn.style.cursor = "pointer";
+    closeBtn.style.marginLeft = "5px";
+    closeBtn.onclick = () => {
+      toggleContainer.style.display = "none";
+    };
+
     toggleContainer.appendChild(autoBtn);
     toggleContainer.appendChild(createButton("base"));
     toggleContainer.appendChild(createButton("webgl"));
     toggleContainer.appendChild(createButton("retro"));
-    toggleContainer.appendChild(createButton("retro2"));
+    toggleContainer.appendChild(createButton("rgb"));
+    toggleContainer.appendChild(closeBtn);
 
     // Add hover effect for the container to become more visible
     toggleContainer.style.transition = "background-color 0.3s";

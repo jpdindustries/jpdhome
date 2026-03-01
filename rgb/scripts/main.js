@@ -301,8 +301,8 @@ document.addEventListener("DOMContentLoaded", () => {
       this.x = x;
       this.y = y;
       // The segment width and height
-      this.segmentWidth = 8;
-      this.segmentHeight = 4;
+      this.segmentWidth = 16;
+      this.segmentHeight = 8;
       this.opacity = 1;
       // Shorter lifespan to look like Nyan cat blocky trail
       this.decayRate = 0.04;
