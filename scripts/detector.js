@@ -85,6 +85,15 @@ class VersionDetector {
     async detectCapabilities() {
         console.log('Starting capability detection...');
 
+        // Check for URL override first
+        const urlParams = new URLSearchParams(window.location.search);
+        const versionOverride = urlParams.get('v');
+        if (versionOverride && ['base', 'webgl', 'retro'].includes(versionOverride)) {
+            console.log(`Version overridden by URL parameter: ${versionOverride}`);
+            this.selectedVersion = versionOverride;
+            return this.selectedVersion;
+        }
+
         // Step 1: Check WebGL support
         this.webglSupported = this.checkWebGLSupport();
         this.testResults.webgl = this.webglSupported;
@@ -98,7 +107,7 @@ class VersionDetector {
         // Step 2: Check GPU quality and show info
         this.goodGPU = this.checkGPUQuality();
         this.showGPUInfo();
-        
+
         // Step 3: Run performance test
         console.log('Running performance test...');
         this.showPerformanceMeter();
@@ -239,11 +248,11 @@ class VersionDetector {
                 const randoms = new Float32Array(totalParticles);
 
                 let particleIndex = 0;
-                
+
                 starLayers.forEach(layer => {
                     for (let i = 0; i < layer.count; i++) {
                         const i3 = particleIndex * 3;
-                        
+
                         // Position with depth (adapted for raw WebGL coordinates)
                         positions[i3] = (Math.random() - 0.5) * 4.0;      // X: -2 to 2
                         positions[i3 + 1] = (Math.random() - 0.5) * 4.0;  // Y: -2 to 2
@@ -400,15 +409,21 @@ class VersionDetector {
             if (version === 'webgl') {
                 loadingText.textContent = 'Loading WebGL version...';
                 await this.loadWebGLVersion();
+            } else if (version === 'retro') {
+                loadingText.textContent = 'Loading Retro version...';
+                await this.loadRetroVersion();
             } else {
                 loadingText.textContent = 'Loading base version...';
                 await this.loadBaseVersion();
             }
 
+            // Add the version toggle UI
+            this.addVersionToggle(version);
+
             // Fade in new content
             document.body.classList.remove('content-fade-out');
             document.body.classList.add('content-fade-in');
-            
+
             // Wait for content to fade in
             await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -466,6 +481,21 @@ class VersionDetector {
         // Load and execute base script after HTML is updated
         // We need to load the script text and evaluate it, since DOMContentLoaded has already fired
         await this.loadAndExecuteBaseScript();
+    }
+
+    /**
+     * Load retro version assets
+     */
+    async loadRetroVersion() {
+        // Load retro styles
+        await this.loadStylesheet('retro/styles/main.css');
+        await this.loadStylesheet('retro/styles/animations.css');
+
+        // Update HTML content for retro
+        this.updateHTMLForRetro();
+
+        // Load and execute retro script after HTML is updated
+        await this.loadAndExecuteRetroScript();
     }
 
     /**
@@ -558,6 +588,28 @@ class VersionDetector {
     }
 
     /**
+     * Update HTML for retro version
+     */
+    updateHTMLForRetro() {
+        const body = document.body;
+
+        body.innerHTML = `
+            <canvas id="nebula-canvas"></canvas>
+            <canvas id="stars-canvas"></canvas>
+            <div id="logo-container">
+                <img src="retro/assets/jpdlogo.png" alt="JPD Logo" id="logo">
+            </div>
+
+            <div id="space-object-container">
+                <img src="retro/assets/jpdaustronaut.png" alt="Floating Astronaut" id="astronaut" class="space-object">
+                <img src="retro/assets/meteorite.png" alt="Floating Meteorite" id="meteorite" class="space-object">
+                <img src="retro/assets/rocket.png" alt="Flying Rocket" id="rocket" class="space-object">
+                <img src="retro/assets/satellite.png" alt="Floating Satellite" id="satellite" class="space-object">
+            </div>
+        `;
+    }
+
+    /**
      * Load and execute base script, simulating DOMContentLoaded
      */
     loadAndExecuteBaseScript() {
@@ -569,7 +621,7 @@ class VersionDetector {
                     throw new Error(`Failed to fetch base script: ${response.status} ${response.statusText}`);
                 }
                 const scriptText = await response.text();
-                
+
                 // Wrap the script in an immediately invoked function that simulates DOMContentLoaded
                 // We replace the DOMContentLoaded listener with immediate execution
                 // This regex handles various formatting styles of the event listener
@@ -577,19 +629,49 @@ class VersionDetector {
                     /document\.addEventListener\s*\(\s*['"]DOMContentLoaded['"]\s*,\s*(?:\(\s*\)\s*=>|function\s*\(\s*\))\s*{/,
                     '(function() {'
                 );
-                
+
                 // Add closing for the wrapper and immediate invocation
                 // Match the closing pattern more flexibly
                 const executableScript = wrappedScript.replace(/}\s*\)\s*;?\s*$/, '})();');
-                
+
                 // Create and execute the script
                 const script = document.createElement('script');
                 script.textContent = executableScript;
                 document.body.appendChild(script);
-                
+
                 resolve();
             } catch (error) {
                 console.error('Failed to load base script:', error);
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * Load and execute retro script, simulating DOMContentLoaded
+     */
+    loadAndExecuteRetroScript() {
+        return new Promise(async (resolve, reject) => {
+            try {
+                const response = await fetch('retro/scripts/main.js');
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch retro script: ${response.status} ${response.statusText}`);
+                }
+                const scriptText = await response.text();
+
+                const wrappedScript = scriptText.replace(
+                    /document\.addEventListener\s*\(\s*['"]DOMContentLoaded['"]\s*,\s*(?:\(\s*\)\s*=>|function\s*\(\s*\))\s*{/,
+                    '(function() {'
+                );
+                const executableScript = wrappedScript.replace(/}\s*\)\s*;?\s*$/, '})();');
+
+                const script = document.createElement('script');
+                script.textContent = executableScript;
+                document.body.appendChild(script);
+
+                resolve();
+            } catch (error) {
+                console.error('Failed to load retro script:', error);
                 reject(error);
             }
         });
@@ -606,7 +688,7 @@ class VersionDetector {
             gpuInfoElement.style.transition = 'opacity 0.3s ease-out';
             gpuInfoElement.style.opacity = '0';
             gpuInfoElement.style.display = 'block';
-            
+
             // Wait for transition to complete
             await new Promise(resolve => setTimeout(resolve, 50));
             gpuInfoElement.style.opacity = '1';
@@ -623,7 +705,7 @@ class VersionDetector {
             meterElement.style.transition = 'opacity 0.3s ease-out';
             meterElement.style.opacity = '0';
             meterElement.style.display = 'block';
-            
+
             // Wait for transition to complete
             await new Promise(resolve => setTimeout(resolve, 50));
             meterElement.style.opacity = '1';
@@ -640,7 +722,7 @@ class VersionDetector {
             // Add fade-out transition
             meterElement.style.transition = 'opacity 0.3s ease-out';
             meterElement.style.opacity = '0';
-            
+
             // Wait for transition to complete before hiding
             await new Promise(resolve => setTimeout(resolve, 300));
             meterElement.style.display = 'none';
@@ -675,6 +757,68 @@ class VersionDetector {
             const offset = circumference - (percentage * circumference);
             gaugeFill.style.strokeDashoffset = offset;
         }
+    }
+
+    /**
+     * Add a UI toggle to switch versions
+     */
+    addVersionToggle(currentVersion) {
+        // Only append if it doesn't already exist
+        if (document.getElementById('version-toggle')) return;
+
+        const toggleContainer = document.createElement('div');
+        toggleContainer.id = 'version-toggle';
+        toggleContainer.style.position = 'fixed';
+        toggleContainer.style.bottom = '20px';
+        toggleContainer.style.right = '20px';
+        toggleContainer.style.zIndex = '1000';
+        toggleContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+        toggleContainer.style.border = '1px solid #FF0000';
+        toggleContainer.style.borderRadius = '5px';
+        toggleContainer.style.padding = '5px';
+        toggleContainer.style.fontFamily = 'monospace';
+        toggleContainer.style.fontSize = '12px';
+        toggleContainer.style.color = '#FFF';
+        toggleContainer.style.display = 'flex';
+        toggleContainer.style.gap = '5px';
+
+        const createButton = (vName) => {
+            const btn = document.createElement('button');
+            btn.textContent = vName.toUpperCase();
+            btn.style.background = vName === currentVersion ? '#FF0000' : 'transparent';
+            btn.style.color = '#FFF';
+            btn.style.border = '1px solid #FF0000';
+            btn.style.padding = '3px 8px';
+            btn.style.cursor = 'pointer';
+            btn.style.borderRadius = '3px';
+            btn.onclick = () => {
+                const url = new URL(window.location);
+                url.searchParams.set('v', vName);
+                window.location.href = url.toString();
+            };
+            return btn;
+        };
+
+        const autoBtn = document.createElement('button');
+        autoBtn.textContent = 'AUTO';
+        autoBtn.style.background = !window.location.search.includes('v=') ? '#FF0000' : 'transparent';
+        autoBtn.style.color = '#FFF';
+        autoBtn.style.border = '1px solid #FF0000';
+        autoBtn.style.padding = '3px 8px';
+        autoBtn.style.cursor = 'pointer';
+        autoBtn.style.borderRadius = '3px';
+        autoBtn.onclick = () => {
+            const url = new URL(window.location);
+            url.searchParams.delete('v');
+            window.location.href = url.toString();
+        };
+
+        toggleContainer.appendChild(autoBtn);
+        toggleContainer.appendChild(createButton('base'));
+        toggleContainer.appendChild(createButton('webgl'));
+        toggleContainer.appendChild(createButton('retro'));
+
+        document.body.appendChild(toggleContainer);
     }
 
     /**
