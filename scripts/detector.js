@@ -409,7 +409,7 @@ class VersionDetector {
         // Run performance test
         let frameCount = 0;
         const startTime = performance.now();
-        const testDuration = 4000; // 4 seconds for accurate measurement
+        const testDuration = 2000; // 2 seconds
         let lastUpdateTime = startTime;
 
         const animate = () => {
