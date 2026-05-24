@@ -1,65 +1,115 @@
 :root {
-  --primary-red: #FF0000;
-  --red-glow: 0 0 10px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.3);
-  --red-dim: #000000;
-  --red-dark: #330000;
-  --background-color: #16161D;
-  --logo-width: 300px;
-  --space-object-width: 38px;
+  --primary-red: #ff154f;
+  --cyan: #3ffcff;
+  --violet: #9b55ff;
+  --gold: #ffd36a;
+  --background-color: #03020a;
+  --logo-width: clamp(220px, 24vw, 360px);
+  --space-object-width: 46px;
+  --flight-intensity: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
 }
 
 body {
-    background-color: var(--background-color);
-    color: white;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    font-family: sans-serif;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(60, 16, 96, 0.22), transparent 32%),
+    radial-gradient(circle at 20% 18%, rgba(0, 255, 225, 0.12), transparent 26%),
+    radial-gradient(circle at 82% 72%, rgba(255, 32, 92, 0.12), transparent 30%),
+    linear-gradient(140deg, #03020a 0%, #080316 48%, #02040a 100%);
+  color: white;
+  margin: 0;
+  min-height: 100%;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  isolation: isolate;
 }
 
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(255, 0, 64, 0.045), rgba(0, 255, 255, 0.035), rgba(132, 76, 255, 0.045)),
+    radial-gradient(circle at center, transparent 38%, rgba(0, 0, 0, 0.55) 100%);
+  mix-blend-mode: screen;
+  opacity: 0.78;
+}
+
+#webgl-canvas {
+  width: 100%;
+  height: 100%;
+}
 
 #logo-container {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 1;
-    transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 5;
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  will-change: transform;
+  pointer-events: none;
 }
 
 #logo {
-    width: var(--logo-width);
-    max-width: 80vw;
-    filter: drop-shadow(var(--red-glow));
-    animation: pulse-glow 6s infinite;
+  width: var(--logo-width);
+  max-width: 76vw;
+  display: block;
+  animation: logo-spectrum 5.6s ease-in-out infinite;
+  filter:
+    drop-shadow(0 0 10px rgba(255, 31, 92, 0.88))
+    drop-shadow(0 0 22px rgba(81, 232, 255, 0.42))
+    drop-shadow(0 0 44px rgba(162, 79, 255, 0.3));
+  transform: translateZ(0);
 }
 
 #space-object-container {
-    position: fixed;
-    z-index: 0;
-    opacity: 0;
-    pointer-events: none;
-    /* Animation properties will be set by JS */
-    transform: translate(var(--start-x, -200px), var(--start-y, -200px)) rotate(var(--start-rotate, 0deg));
+  position: fixed;
+  z-index: 4;
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: center;
+  will-change: transform, opacity, filter;
+  transform: translate(var(--start-x, -200px), var(--start-y, -200px)) rotate(var(--start-rotate, 0deg)) scale(var(--object-scale, 1));
+  filter:
+    drop-shadow(0 0 10px rgba(255, 255, 255, 0.45))
+    drop-shadow(0 0 22px rgba(65, 245, 255, 0.28));
 }
 
 .space-object {
-    width: var(--space-object-width);
-    transform-origin: center;
-    position: absolute;
-    display: none;
-}
-
-#rocket {
-    /* Rocket's rotation is now handled by the container */
+  width: var(--space-object-width);
+  transform-origin: center;
+  position: absolute;
+  display: none;
+  object-fit: contain;
+  image-rendering: auto;
 }
 
 #space-object-container.animate {
-    opacity: 1;
-    animation: move-astronaut var(--duration, 20s) linear forwards;
+  animation: move-space-object var(--duration, 12s) linear forwards;
 }
 
 #space-object-container.animate.rocket #rocket {
-    animation: rocket-squiggle 1.2s ease-in-out infinite;
+  animation: rocket-squiggle 0.72s ease-in-out infinite;
 }
 
+@media (max-width: 820px), (pointer: coarse) {
+  :root {
+    --logo-width: clamp(190px, 52vw, 280px);
+  }
+
+  body::after {
+    opacity: 0.58;
+  }
+}
