@@ -107,7 +107,6 @@ class VersionDetector {
   async detectCapabilities() {
     console.log("Starting capability detection...");
 
-    // Check for URL override first
     const urlParams = new URLSearchParams(window.location.search);
     const versionOverride = urlParams.get("v");
     if (
@@ -119,35 +118,8 @@ class VersionDetector {
       return this.selectedVersion;
     }
 
-    // Step 1: Check WebGL support
-    this.webglSupported = this.checkWebGLSupport();
-    this.testResults.webgl = this.webglSupported;
-
-    if (!this.webglSupported) {
-      console.log("WebGL not supported, using base version");
-      this.selectedVersion = "base";
-      return this.selectedVersion;
-    }
-
-    // Step 2: Check GPU quality and show info
-    this.goodGPU = this.checkGPUQuality();
-    this.showGPUInfo();
-
-    // Step 3: Run performance test
-    console.log("Running performance test...");
-    this.showPerformanceMeter();
-    this.performanceTestPassed = await this.runPerformanceTest();
-    this.hidePerformanceMeter();
-    this.testResults.performance = this.performanceTestPassed;
-
-    if (this.performanceTestPassed) {
-      console.log("Performance test passed, using WebGL version");
-      this.selectedVersion = "webgl";
-    } else {
-      console.log("Performance test failed, using base version");
-      this.selectedVersion = "base";
-    }
-
+    console.log("No version override provided, defaulting to base version");
+    this.selectedVersion = "base";
     return this.selectedVersion;
   }
 
@@ -526,12 +498,6 @@ class VersionDetector {
    * Load WebGL version assets
    */
   async loadWebGLVersion() {
-    // Load Three.js
-    await this.loadScript(
-      "https://unpkg.com/three@0.164.1/build/three.module.js",
-      "three",
-    );
-
     // Load WebGL styles (non-blocking)
     this.loadStylesheet("webgl/styles/main.css");
     this.loadStylesheet("webgl/styles/animations.css");

@@ -9,7 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
   );
 
   const config = {
-    baseNumStars: 1337,
+    baseNumStars: 2100,
     logoMovementRatio: 0.08,
     lissajous: {
       magnitude: 800,
@@ -19,15 +19,39 @@ document.addEventListener("DOMContentLoaded", () => {
       delta: Math.PI / 2,
     },
     starColors: {
-      whiteBlue: "rgba(200, 200, 255, OPACITY)",
-      yellowWhite: "rgba(255, 255, 200, OPACITY)",
-      redTinted: "rgba(255, 180, 180, OPACITY)",
+      whiteBlue: "rgba(120, 220, 255, OPACITY)",
+      yellowWhite: "rgba(255, 235, 62, OPACITY)",
+      redTinted: "rgba(255, 32, 118, OPACITY)",
+      cyan: "rgba(0, 255, 255, OPACITY)",
+      magenta: "rgba(255, 0, 255, OPACITY)",
+      green: "rgba(35, 255, 84, OPACITY)",
+      orange: "rgba(255, 108, 0, OPACITY)",
     },
     shootingStarColors: [
-      { start: "rgba(255, 100, 100, OPACITY)", end: "rgba(255, 0, 0, 0)" },
-      { start: "rgba(200, 220, 255, OPACITY)", end: "rgba(200, 220, 255, 0)" },
-      { start: "rgba(255, 255, 200, OPACITY)", end: "rgba(255, 255, 0, 0)" },
+      { start: "rgba(255, 32, 118, OPACITY)", end: "rgba(255, 32, 118, 0)" },
+      { start: "rgba(0, 255, 255, OPACITY)", end: "rgba(0, 255, 255, 0)" },
+      { start: "rgba(255, 235, 62, OPACITY)", end: "rgba(255, 235, 62, 0)" },
+      { start: "rgba(35, 255, 84, OPACITY)", end: "rgba(35, 255, 84, 0)" },
+      { start: "rgba(255, 0, 255, OPACITY)", end: "rgba(255, 0, 255, 0)" },
+      { start: "rgba(255, 108, 0, OPACITY)", end: "rgba(255, 108, 0, 0)" },
     ],
+    rainbowTrail: {
+      emitInterval: 34,
+      maxParticles: 120,
+      baseWidth: 8,
+      length: 72,
+      spread: 0.62,
+      driftSpeed: 8.5,
+      decayRate: 0.026,
+      wobble: 7,
+    },
+    nebula: {
+      cloudCount: 6,
+      opacityMin: 0.12,
+      opacityRange: 0.16,
+      hueSpeedMin: 0.1,
+      hueSpeedRange: 0.08,
+    },
     spaceObjects: [
       { id: "astronaut", name: "Astronaut" },
       { id: "meteorite", name: "Meteorite" },
@@ -86,18 +110,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (w <= 480 || (isPortrait && w < 1200)) {
       state.starSizeScale = 0.6;
-      state.starCountScale = 0.3;
-      state.shootingFreq = 0.005;
+      state.starCountScale = 0.42;
+      state.shootingFreq = 0.008;
       state.logoMovementRatio = 0.02;
     } else if (w <= 1200) {
       state.starSizeScale = 0.8;
-      state.starCountScale = 0.4;
-      state.shootingFreq = 0.008;
+      state.starCountScale = 0.62;
+      state.shootingFreq = 0.012;
       state.logoMovementRatio = 0.04;
     } else {
       state.starSizeScale = 1;
       state.starCountScale = 1;
-      state.shootingFreq = 0.015;
+      state.shootingFreq = 0.022;
       state.logoMovementRatio = config.logoMovementRatio;
     }
 
@@ -120,9 +144,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function getRandomColor() {
     const rand = Math.random();
-    if (rand < 0.7) return config.starColors.whiteBlue;
-    if (rand < 0.9) return config.starColors.yellowWhite;
-    return config.starColors.redTinted;
+    if (rand < 0.22) return config.starColors.cyan;
+    if (rand < 0.4) return config.starColors.magenta;
+    if (rand < 0.56) return config.starColors.green;
+    if (rand < 0.7) return config.starColors.yellowWhite;
+    if (rand < 0.83) return config.starColors.redTinted;
+    if (rand < 0.93) return config.starColors.whiteBlue;
+    return config.starColors.orange;
   }
 
   function getStarMovementRatio(star) {
@@ -288,49 +316,87 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   const rainbowColors = [
-    "rgba(255, 0, 0, OPACITY)", // Red
-    "rgba(255, 153, 0, OPACITY)", // Orange
-    "rgba(255, 255, 0, OPACITY)", // Yellow
-    "rgba(51, 255, 0, OPACITY)", // Green
-    "rgba(0, 153, 255, OPACITY)", // Blue
-    "rgba(102, 51, 255, OPACITY)", // Purple
+    "rgba(255, 0, 64, OPACITY)",
+    "rgba(255, 128, 0, OPACITY)",
+    "rgba(255, 245, 0, OPACITY)",
+    "rgba(40, 255, 84, OPACITY)",
+    "rgba(0, 235, 255, OPACITY)",
+    "rgba(84, 82, 255, OPACITY)",
+    "rgba(255, 44, 236, OPACITY)",
   ];
 
   class RainbowTrailParticle {
-    constructor(x, y, dx, dy) {
-      this.x = x;
-      this.y = y;
-      // The segment width and height
-      this.segmentWidth = 16;
-      this.segmentHeight = 8;
+    constructor(x, y, backX, backY) {
+      const length = Math.hypot(backX, backY) || 1;
+      this.originX = x;
+      this.originY = y;
+      this.dirX = backX / length;
+      this.dirY = backY / length;
+      this.normalX = -this.dirY;
+      this.normalY = this.dirX;
+      this.age = 0;
       this.opacity = 1;
-      // Shorter lifespan to look like Nyan cat blocky trail
-      this.decayRate = 0.04;
-      this.vx = dx;
-      this.vy = dy;
+      this.decayRate = config.rainbowTrail.decayRate * (0.8 + Math.random() * 0.4);
+      this.speed = config.rainbowTrail.driftSpeed * (0.85 + Math.random() * 0.35);
+      this.segmentLength = config.rainbowTrail.length * (0.72 + Math.random() * 0.48);
+      this.spread = config.rainbowTrail.spread * (0.84 + Math.random() * 0.34);
+      this.baseWidth = config.rainbowTrail.baseWidth * (0.82 + Math.random() * 0.45);
+      this.wobble = config.rainbowTrail.wobble * (0.55 + Math.random() * 0.9);
+      this.wobblePhase = Math.random() * Math.PI * 2;
+      this.colorOffset = Math.floor(Math.random() * rainbowColors.length);
     }
 
     update() {
-      this.x += this.vx;
-      this.y += this.vy;
+      this.age += 1;
       this.opacity -= this.decayRate;
     }
 
     draw(ctx) {
-      const totalHeight = rainbowColors.length * this.segmentHeight;
-      const startY = this.y - totalHeight / 2;
+      const endDistance = this.age * this.speed;
+      const startDistance = Math.max(0, endDistance - this.segmentLength);
+      const nearWidth = this.baseWidth + startDistance * this.spread;
+      const farWidth = this.baseWidth + endDistance * this.spread;
+      const nearCenterX = this.originX + this.dirX * startDistance;
+      const nearCenterY = this.originY + this.dirY * startDistance;
+      const farCenterX = this.originX + this.dirX * endDistance;
+      const farCenterY = this.originY + this.dirY * endDistance;
+      const wobbleNear = Math.sin(this.age * 0.18 + this.wobblePhase) * this.wobble * 0.28;
+      const wobbleFar = Math.sin(this.age * 0.18 + this.wobblePhase + 0.9) * this.wobble;
+      const alpha = Math.max(0, this.opacity);
 
-      rainbowColors.forEach((color, i) => {
-        ctx.fillStyle = color.replace("OPACITY", Math.max(0, this.opacity));
-        // Align them perfectly on top of each other
-        const blockY = startY + i * this.segmentHeight;
-        ctx.fillRect(
-          Math.floor(this.x),
-          Math.floor(blockY),
-          this.segmentWidth,
-          this.segmentHeight,
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+
+      rainbowColors.forEach((_, i) => {
+        const colorIndex = (i + this.colorOffset) % rainbowColors.length;
+        const nearA = -nearWidth / 2 + (nearWidth / rainbowColors.length) * i;
+        const nearB = -nearWidth / 2 + (nearWidth / rainbowColors.length) * (i + 1);
+        const farA = -farWidth / 2 + (farWidth / rainbowColors.length) * i;
+        const farB = -farWidth / 2 + (farWidth / rainbowColors.length) * (i + 1);
+
+        ctx.fillStyle = rainbowColors[colorIndex].replace("OPACITY", alpha);
+        ctx.beginPath();
+        ctx.moveTo(
+          nearCenterX + this.normalX * (nearA + wobbleNear),
+          nearCenterY + this.normalY * (nearA + wobbleNear),
         );
+        ctx.lineTo(
+          nearCenterX + this.normalX * (nearB + wobbleNear),
+          nearCenterY + this.normalY * (nearB + wobbleNear),
+        );
+        ctx.lineTo(
+          farCenterX + this.normalX * (farB + wobbleFar),
+          farCenterY + this.normalY * (farB + wobbleFar),
+        );
+        ctx.lineTo(
+          farCenterX + this.normalX * (farA + wobbleFar),
+          farCenterY + this.normalY * (farA + wobbleFar),
+        );
+        ctx.closePath();
+        ctx.fill();
       });
+
+      ctx.restore();
     }
 
     isFaded() {
@@ -345,9 +411,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const maxWidth = Math.min(nebulaCanvas.width, 1400);
       this.baseRadius = Math.random() * (maxWidth / 2.5) + maxWidth / 2.5;
       this.radius = this.baseRadius;
-      this.maxOpacity = Math.random() * 0.4 + 0.2; // Much more intense opacity
-      this.baseHue = Math.random() * 360; // Start with a random full hue
-      this.hueSpeed = Math.random() * 0.04 + 0.02; // Faster shifting
+      this.maxOpacity =
+        config.nebula.opacityMin + Math.random() * config.nebula.opacityRange;
+      this.baseHue = Math.random() * 360;
+      this.hueSpeed =
+        config.nebula.hueSpeedMin + Math.random() * config.nebula.hueSpeedRange;
       this.vx = (Math.random() - 0.5) * 0.3;
       this.vy = (Math.random() - 0.5) * 0.3;
 
@@ -386,13 +454,17 @@ document.addEventListener("DOMContentLoaded", () => {
       const currentHue = Math.floor(this.baseHue);
       grad.addColorStop(
         0.0,
-        `hsla(${currentHue}, 100%, 60%, ${this.maxOpacity})`,
+        `hsla(${currentHue}, 100%, 58%, ${this.maxOpacity})`,
       );
       grad.addColorStop(
-        0.4,
-        `hsla(${(currentHue + 30) % 360}, 100%, 50%, ${this.maxOpacity * 0.7})`,
+        0.26,
+        `hsla(${(currentHue + 78) % 360}, 100%, 52%, ${this.maxOpacity * 0.9})`,
       );
-      grad.addColorStop(1, `hsla(${(currentHue + 60) % 360}, 100%, 50%, 0)`);
+      grad.addColorStop(
+        0.58,
+        `hsla(${(currentHue + 172) % 360}, 100%, 50%, ${this.maxOpacity * 0.56})`,
+      );
+      grad.addColorStop(1, `hsla(${(currentHue + 240) % 360}, 100%, 50%, 0)`);
 
       ctx.fillStyle = grad;
       ctx.fillRect(
@@ -406,7 +478,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function setupScene() {
     state.nebulaClouds.length = 0;
-    for (let i = 0; i < 4; i++) state.nebulaClouds.push(new NebulaCloud());
+    for (let i = 0; i < config.nebula.cloudCount; i++) {
+      state.nebulaClouds.push(new NebulaCloud());
+    }
     adjustStarCount();
   }
 
@@ -474,6 +548,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function manageAstronautTrail() {
+    if (state.astronautTrailParticles.length > config.rainbowTrail.maxParticles) {
+      state.astronautTrailParticles.splice(
+        0,
+        state.astronautTrailParticles.length - config.rainbowTrail.maxParticles,
+      );
+    }
+
     for (let i = state.astronautTrailParticles.length - 1; i >= 0; i--) {
       const particle = state.astronautTrailParticles[i];
       particle.update();
@@ -621,6 +702,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const { startPos, endPos } = getOffscreenPositions(buffer);
     const duration = Math.random() * 10 + 10;
+    const travelX = endPos.x - startPos.x;
+    const travelY = endPos.y - startPos.y;
+    const travelLength = Math.hypot(travelX, travelY) || 1;
+    const fallbackBack = {
+      x: -travelX / travelLength,
+      y: -travelY / travelLength,
+    };
     const { startRotation, endRotation } = getObjectRotation(
       spaceObject.id,
       startPos,
@@ -652,10 +740,11 @@ document.addEventListener("DOMContentLoaded", () => {
     spaceObject.element.style.display = "block";
 
     const msDuration = Math.round(duration * 1000);
-    manageAnimation(container, spaceObject.element, msDuration);
+    manageAnimation(container, spaceObject.element, msDuration, fallbackBack);
   }
-  function manageAnimation(container, element, msDuration) {
+  function manageAnimation(container, element, msDuration, fallbackBack) {
     let trailInterval;
+    let lastCenter = null;
     const startEmittingTrail = () => {
       if (trailInterval) clearInterval(trailInterval);
       trailInterval = setInterval(() => {
@@ -663,17 +752,25 @@ document.addEventListener("DOMContentLoaded", () => {
         if (rect.width > 0) {
           const centerX = rect.left + rect.width / 2;
           const centerY = rect.top + rect.height / 2;
-          // The RainbowTrailParticle only needs one instantiation to draw the 6 stripes
+          let backX = fallbackBack.x;
+          let backY = fallbackBack.y;
+
+          if (lastCenter) {
+            const dx = centerX - lastCenter.x;
+            const dy = centerY - lastCenter.y;
+            const distance = Math.hypot(dx, dy);
+            if (distance > 0.4) {
+              backX = -dx / distance;
+              backY = -dy / distance;
+            }
+          }
+
           state.astronautTrailParticles.push(
-            new RainbowTrailParticle(
-              centerX,
-              centerY,
-              (Math.random() - 0.5) * 0.1, // Slight horizontal drift
-              (Math.random() - 0.5) * 0.1, // Slight vertical drift
-            ),
+            new RainbowTrailParticle(centerX, centerY, backX, backY),
           );
+          lastCenter = { x: centerX, y: centerY };
         }
-      }, 50);
+      }, config.rainbowTrail.emitInterval);
     };
 
     const onDone = () => {
