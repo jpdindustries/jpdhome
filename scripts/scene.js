@@ -1,51 +1,86 @@
 import * as THREE from 'three';
 
-let scene, camera, renderer, objectTrailCanvas, objectTrailCtx;
-let logoContainer, spaceObjectContainer, currentSpaceObjectElement;
+let scene, camera, renderer, celestialEventCanvas, celestialEventCtx;
+let logoContainer;
 const clock = new THREE.Clock();
 
 const pointerTarget = new THREE.Vector2();
 const pointerCurrent = new THREE.Vector2();
+const pointerParallax = new THREE.Vector2();
 const logoOffset = new THREE.Vector2();
 const logoTarget = new THREE.Vector2();
 const windowHalf = new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2);
 
 const starLayers = [];
 const nebulaClouds = [];
-const objectTrailParticles = [];
+const celestialEvents = [];
 const reusableColor = new THREE.Color();
 
 let lastPointerActivity = performance.now();
 let flightIntensity = 0;
 let flightVisualIntensity = 0;
 let flightDistance = 0;
-let lastTrailScreenPosition = null;
-let activeObjectVelocity = new THREE.Vector2(1, 0);
+let parallaxLock = 0;
+let celestialEventTimer = null;
+let starControlContainer = null;
+let starCountValue = null;
 
 const quality = getQualitySettings();
+const baseStarLayerCounts = quality.starLayers.map((layer) => layer.count);
+const defaultStarTotal = baseStarLayerCounts.reduce((total, count) => total + count, 0);
+let currentStarTotal = defaultStarTotal;
+
+const blackHoleState = {
+    clickTimestamps: [],
+    active: false,
+    startTime: 0,
+    progress: 0,
+    renderTarget: null,
+    distortionTarget: null,
+    scene: null,
+    camera: null,
+    material: null,
+    mesh: null,
+    distortionScene: null,
+    distortionCamera: null,
+    distortionMaterial: null,
+    distortionMesh: null,
+    targetRadius: 0.25,
+    coreRadius: 0.105,
+    logoScale: 1,
+};
 
 const config = {
     logoMovementRatio: quality.isCompact ? 0.026 : 0.048,
     pointerSmoothing: 0.055,
     logoSmoothing: 0.045,
-    spaceObjects: [
-        { id: 'astronaut', name: 'Astronaut', size: quality.isCompact ? 38 : 48, trailHue: 0.56 },
-        { id: 'meteorite', name: 'Meteorite', size: quality.isCompact ? 34 : 42, trailHue: 0.04 },
-        { id: 'rocket', name: 'Rocket', size: quality.isCompact ? 40 : 50, trailHue: 0.94 },
-        { id: 'satellite', name: 'Satellite', size: quality.isCompact ? 36 : 44, trailHue: 0.15 },
-    ],
     flight: {
         idleDelay: quality.prefersReducedMotion ? 9000 : 3200,
         fadeIn: quality.prefersReducedMotion ? 6500 : 4300,
         rise: quality.prefersReducedMotion ? 0.38 : 0.72,
         fall: quality.prefersReducedMotion ? 1.4 : 2.8,
         speed: quality.flightSpeed,
-        drift: quality.isCompact ? 34 : 68,
     },
-    trail: {
-        maxParticles: quality.trailParticles,
-        emitRate: quality.trailEmitRate,
-        baseLife: quality.isCompact ? 0.68 : 0.92,
+    celestialEvents: {
+        maxActive: quality.maxCelestialEvents,
+        firstDelay: quality.isCompact ? [2600, 4200] : [2000, 3600],
+        interval: quality.prefersReducedMotion ? [12000, 22000] : quality.isCompact ? [7000, 14000] : [5000, 11000],
+        brightness: quality.prefersReducedMotion ? 0.44 : quality.isCompact ? 0.68 : 0.76,
+    },
+    blackHole: {
+        clicksRequired: 3,
+        clickWindowMs: 3000,
+        growthDuration: 10000,
+        targetDiameterRatio: 0.55,
+        coreDiameterRatio: 0.42,
+        logoPadding: 32,
+        minLogoScale: 0.38,
+        reducedMotion: quality.prefersReducedMotion ? 1 : 0,
+    },
+    starControls: {
+        step: 10000,
+        min: 10000,
+        max: 2400000,
     },
     starLayers: quality.starLayers,
     nebulaCount: quality.nebulaCount,
@@ -63,8 +98,7 @@ function getQualitySettings() {
             isCompact,
             pixelRatio: 1,
             flightSpeed: 60,
-            trailParticles: 240,
-            trailEmitRate: 1,
+            maxCelestialEvents: 1,
             nebulaCount: 4,
             starLayers: [
                 { count: 5200, size: 1.2, farZ: -3000, nearZ: 540, spread: 2200, parallax: 0.028, speed: 0.56 },
@@ -80,8 +114,7 @@ function getQualitySettings() {
             isCompact,
             pixelRatio: Math.min(window.devicePixelRatio, 1.35),
             flightSpeed: 185,
-            trailParticles: 360,
-            trailEmitRate: 1,
+            maxCelestialEvents: 2,
             nebulaCount: 5,
             starLayers: [
                 { count: 7800, size: 1.2, farZ: -3200, nearZ: 560, spread: 2150, parallax: 0.035, speed: 0.62 },
@@ -97,8 +130,7 @@ function getQualitySettings() {
             isCompact,
             pixelRatio: Math.min(window.devicePixelRatio, 1.7),
             flightSpeed: 260,
-            trailParticles: 500,
-            trailEmitRate: 2,
+            maxCelestialEvents: 3,
             nebulaCount: 6,
             starLayers: [
                 { count: 12800, size: 1.15, farZ: -3500, nearZ: 560, spread: 2550, parallax: 0.038, speed: 0.62 },
@@ -113,8 +145,7 @@ function getQualitySettings() {
         isCompact,
         pixelRatio: Math.min(window.devicePixelRatio, 2),
         flightSpeed: 330,
-        trailParticles: 700,
-        trailEmitRate: 4,
+        maxCelestialEvents: 3,
         nebulaCount: 7,
         starLayers: [
             { count: 18000, size: 1.15, farZ: -3800, nearZ: 560, spread: 3000, parallax: 0.04, speed: 0.62 },
@@ -126,7 +157,6 @@ function getQualitySettings() {
 
 function init() {
     logoContainer = document.getElementById('logo-container');
-    spaceObjectContainer = document.getElementById('space-object-container');
 
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(63, window.innerWidth / window.innerHeight, 1, 5000);
@@ -152,7 +182,9 @@ function init() {
 
     createStars();
     createNebula();
-    createTrail();
+    createCelestialEventOverlay();
+    createStarControls();
+    setupLogoInteraction();
 
     window.addEventListener('resize', onWindowResize, false);
     document.addEventListener('pointermove', onPointerMove, false);
@@ -161,7 +193,7 @@ function init() {
         if (!document.hidden) clock.getDelta();
     });
 
-    setTimeout(launchSpaceObject, quality.isCompact ? 1800 : 1200);
+    scheduleCelestialEvent(randRange(config.celestialEvents.firstDelay[0], config.celestialEvents.firstDelay[1]));
     animate();
 }
 
@@ -218,23 +250,21 @@ function createStarLayer(layerConfig, index) {
             varying float vFlight;
             varying float vAngle;
             varying float vDepthGlow;
-
-            float hash(float n) {
-                return fract(sin(n) * 43758.5453123);
-            }
+            varying float vDepthFade;
 
             void main() {
                 float moved = position.z - uFarZ + uFlightDistance * uLayerSpeed;
-                float cycle = floor(moved / uDepthSpan);
                 float wrappedZ = uFarZ + mod(moved, uDepthSpan);
-                vec2 cycleJitter = vec2(hash(random * 91.7 + cycle * 17.0), hash(random * 37.1 + cycle * 29.0)) - 0.5;
-                vec3 animatedPosition = vec3(position.xy + cycleJitter * 180.0 * uFlightIntensity, wrappedZ);
+                float depthProgress = clamp((wrappedZ - uFarZ) / uDepthSpan, 0.0, 1.0);
+                vec3 animatedPosition = vec3(position.xy, wrappedZ);
 
                 vec4 mvPosition = modelViewMatrix * vec4(animatedPosition, 1.0);
                 float perspective = 720.0 / max(180.0, -mvPosition.z);
-                float streakBoost = mix(1.0, 2.65, uFlightIntensity * smoothstep(0.18, 1.0, perspective));
+                float flightNearness = smoothstep(0.18, 1.0, perspective);
+                float streakBoost = mix(1.0, 2.75, uFlightIntensity * flightNearness);
+                float pointSizeCap = mix(16.0, 28.0, uFlightIntensity);
 
-                gl_PointSize = clamp(size * perspective * streakBoost, 0.65, 22.0);
+                gl_PointSize = clamp(size * perspective * streakBoost, 0.65, pointSizeCap);
                 gl_Position = projectionMatrix * mvPosition;
 
                 vColor = color;
@@ -242,6 +272,8 @@ function createStarLayer(layerConfig, index) {
                 vFlight = uFlightIntensity;
                 vAngle = atan(mvPosition.y, mvPosition.x);
                 vDepthGlow = smoothstep(0.0, 1.0, perspective);
+                vDepthFade = smoothstep(0.035, 0.18, depthProgress)
+                    * (1.0 - smoothstep(0.86, 0.99, depthProgress));
             }`,
         fragmentShader: `
             precision highp float;
@@ -251,6 +283,7 @@ function createStarLayer(layerConfig, index) {
             varying float vFlight;
             varying float vAngle;
             varying float vDepthGlow;
+            varying float vDepthFade;
 
             mat2 rotate2d(float a) {
                 float s = sin(a);
@@ -279,12 +312,13 @@ function createStarLayer(layerConfig, index) {
                 float glint = (crossH + crossV) * glintWave * (0.35 + vDepthGlow * 0.75);
 
                 float alpha = max(core * twinkle, streak * 0.72) + glint;
-                vec3 rgbShift = 0.08 * vec3(
+                alpha *= mix(1.0, vDepthFade, vFlight);
+                vec3 rgbShift = 0.018 * vec3(
                     sin(uTime * 0.35 + vRandom * 17.0),
                     sin(uTime * 0.42 + vRandom * 19.0 + 2.1),
                     sin(uTime * 0.31 + vRandom * 23.0 + 4.2)
                 );
-                vec3 color = clamp(vColor + rgbShift + glint * vec3(0.45, 0.22, 0.7), 0.0, 1.35);
+                vec3 color = clamp(vColor + rgbShift + glint * vColor * 0.22, 0.0, 1.0);
 
                 gl_FragColor = vec4(color, clamp(alpha, 0.0, 1.0));
             }`,
@@ -300,19 +334,123 @@ function createStarLayer(layerConfig, index) {
 }
 
 function setStarColor(color, randomValue, layerIndex) {
-    if (randomValue < 0.34) color.setHSL(0.57 + layerIndex * 0.012, 0.95, 0.74);
-    else if (randomValue < 0.55) color.setHSL(0.81, 0.98, 0.72);
-    else if (randomValue < 0.74) color.setHSL(0.12, 0.96, 0.72);
-    else if (randomValue < 0.9) color.setHSL(0.96, 0.94, 0.72);
-    else color.setHSL(Math.random(), 1.0, 0.68);
+    const depthTint = 1 - layerIndex * 0.025;
+
+    if (randomValue < 0.08) {
+        setStarRGB(color, randRange(0.58, 0.7), randRange(0.68, 0.8), randRange(0.9, 0.98), depthTint);
+    } else if (randomValue < 0.27) {
+        setStarRGB(color, randRange(0.78, 0.9), randRange(0.82, 0.92), randRange(0.86, 0.96), depthTint);
+    } else if (randomValue < 0.49) {
+        setStarRGB(color, randRange(0.9, 0.98), randRange(0.76, 0.88), randRange(0.48, 0.64), depthTint);
+    } else if (randomValue < 0.72) {
+        setStarRGB(color, randRange(0.86, 0.96), randRange(0.5, 0.66), randRange(0.28, 0.42), depthTint);
+    } else {
+        setStarRGB(color, randRange(0.68, 0.84), randRange(0.24, 0.36), randRange(0.14, 0.24), depthTint * 0.9);
+    }
+}
+
+function randRange(min, max) {
+    return THREE.MathUtils.randFloat(min, max);
+}
+
+function setStarRGB(color, r, g, b, intensity) {
+    color.setRGB(
+        THREE.MathUtils.clamp(r * intensity, 0, 0.98),
+        THREE.MathUtils.clamp(g * intensity, 0, 0.98),
+        THREE.MathUtils.clamp(b * intensity, 0, 0.98),
+    );
 }
 
 function createStars() {
+    clearStarLayers();
+
     config.starLayers.forEach((layerConfig, index) => {
         const layer = createStarLayer(layerConfig, index);
         starLayers.push(layer);
         scene.add(layer);
     });
+}
+
+function clearStarLayers() {
+    while (starLayers.length > 0) {
+        const layer = starLayers.pop();
+        scene.remove(layer);
+        layer.geometry.dispose();
+        layer.material.dispose();
+    }
+}
+
+function createStarControls() {
+    starControlContainer = document.createElement('div');
+    starControlContainer.className = 'star-controls';
+    starControlContainer.setAttribute('aria-label', 'Star count controls');
+
+    const minusButton = document.createElement('button');
+    minusButton.type = 'button';
+    minusButton.className = 'star-control-button';
+    minusButton.textContent = '-';
+    minusButton.setAttribute('aria-label', 'Remove 10,000 stars');
+    minusButton.addEventListener('click', () => {
+        setStarTotal(currentStarTotal - config.starControls.step);
+    });
+
+    starCountValue = document.createElement('output');
+    starCountValue.className = 'star-count-value';
+    starCountValue.setAttribute('aria-live', 'polite');
+
+    const plusButton = document.createElement('button');
+    plusButton.type = 'button';
+    plusButton.className = 'star-control-button';
+    plusButton.textContent = '+';
+    plusButton.setAttribute('aria-label', 'Add 10,000 stars');
+    plusButton.addEventListener('click', () => {
+        setStarTotal(currentStarTotal + config.starControls.step);
+    });
+
+    starControlContainer.append(minusButton, starCountValue, plusButton);
+    document.body.appendChild(starControlContainer);
+    updateStarCountDisplay();
+}
+
+function setStarTotal(nextTotal) {
+    const clampedTotal = Math.round(THREE.MathUtils.clamp(
+        nextTotal,
+        config.starControls.min,
+        config.starControls.max,
+    ));
+
+    if (clampedTotal === currentStarTotal) return;
+
+    currentStarTotal = clampedTotal;
+    distributeStarCounts(currentStarTotal);
+    createStars();
+    updateStarCountDisplay();
+}
+
+function distributeStarCounts(total) {
+    let assigned = 0;
+
+    config.starLayers.forEach((layerConfig, index) => {
+        if (index === config.starLayers.length - 1) {
+            layerConfig.count = Math.max(1, total - assigned);
+            return;
+        }
+
+        const ratio = baseStarLayerCounts[index] / defaultStarTotal;
+        layerConfig.count = Math.max(1, Math.round(total * ratio));
+        assigned += layerConfig.count;
+    });
+}
+
+function updateStarCountDisplay() {
+    if (!starControlContainer || !starCountValue) return;
+
+    starCountValue.value = String(currentStarTotal);
+    starCountValue.textContent = currentStarTotal.toLocaleString();
+
+    const buttons = starControlContainer.querySelectorAll('.star-control-button');
+    buttons[0].disabled = currentStarTotal <= config.starControls.min;
+    buttons[1].disabled = currentStarTotal >= config.starControls.max;
 }
 
 function createNebula() {
@@ -431,29 +569,29 @@ function createNebula() {
     }
 }
 
-function createTrail() {
-    objectTrailCanvas = document.createElement('canvas');
-    objectTrailCanvas.id = 'object-trail-canvas';
-    objectTrailCanvas.style.position = 'fixed';
-    objectTrailCanvas.style.inset = '0';
-    objectTrailCanvas.style.zIndex = '3';
-    objectTrailCanvas.style.pointerEvents = 'none';
-    objectTrailCanvas.style.width = '100%';
-    objectTrailCanvas.style.height = '100%';
-    objectTrailCanvas.style.mixBlendMode = 'screen';
-    document.body.insertBefore(objectTrailCanvas, spaceObjectContainer);
+function createCelestialEventOverlay() {
+    celestialEventCanvas = document.createElement('canvas');
+    celestialEventCanvas.id = 'celestial-event-canvas';
+    celestialEventCanvas.style.position = 'fixed';
+    celestialEventCanvas.style.inset = '0';
+    celestialEventCanvas.style.zIndex = '3';
+    celestialEventCanvas.style.pointerEvents = 'none';
+    celestialEventCanvas.style.width = '100%';
+    celestialEventCanvas.style.height = '100%';
+    celestialEventCanvas.style.mixBlendMode = 'screen';
+    document.body.insertBefore(celestialEventCanvas, logoContainer);
 
-    objectTrailCtx = objectTrailCanvas.getContext('2d');
-    resizeTrailCanvas();
+    celestialEventCtx = celestialEventCanvas.getContext('2d');
+    resizeCelestialEventCanvas();
 }
 
-function resizeTrailCanvas() {
-    if (!objectTrailCanvas || !objectTrailCtx) return;
+function resizeCelestialEventCanvas() {
+    if (!celestialEventCanvas || !celestialEventCtx) return;
 
     const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-    objectTrailCanvas.width = Math.ceil(window.innerWidth * pixelRatio);
-    objectTrailCanvas.height = Math.ceil(window.innerHeight * pixelRatio);
-    objectTrailCtx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    celestialEventCanvas.width = Math.ceil(window.innerWidth * pixelRatio);
+    celestialEventCanvas.height = Math.ceil(window.innerHeight * pixelRatio);
+    celestialEventCtx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
 }
 
 function smoothstep(edge0, edge1, value) {
@@ -466,33 +604,530 @@ function smootherstep(edge0, edge1, value) {
     return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
+function setupLogoInteraction() {
+    if (!logoContainer) return;
+
+    logoContainer.setAttribute('role', 'button');
+    logoContainer.setAttribute('tabindex', '0');
+    logoContainer.setAttribute('aria-label', 'JPD logo');
+    logoContainer.setAttribute('aria-pressed', 'false');
+    logoContainer.addEventListener('click', registerLogoActivation, false);
+    logoContainer.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+
+        event.preventDefault();
+        registerLogoActivation();
+    }, false);
+}
+
+function registerLogoActivation() {
+    if (blackHoleState.active) return;
+
+    const now = performance.now();
+    blackHoleState.clickTimestamps = blackHoleState.clickTimestamps
+        .filter((timestamp) => now - timestamp <= config.blackHole.clickWindowMs);
+    blackHoleState.clickTimestamps.push(now);
+
+    if (blackHoleState.clickTimestamps.length >= config.blackHole.clicksRequired) {
+        activateBlackHole(now);
+    }
+}
+
+function activateBlackHole(startTime) {
+    if (blackHoleState.active) return;
+
+    createBlackHolePass();
+    blackHoleState.active = true;
+    blackHoleState.startTime = startTime;
+    blackHoleState.progress = 0;
+    blackHoleState.clickTimestamps.length = 0;
+    lastPointerActivity = startTime;
+    pointerTarget.set(0, 0);
+    flightIntensity = 0;
+    flightVisualIntensity = 0;
+
+    document.body.classList.add('black-hole-active');
+
+    if (logoContainer) {
+        logoOffset.set(0, 0);
+        logoTarget.set(0, 0);
+        logoContainer.style.transform = 'translate(-50%, -50%)';
+        logoContainer.classList.add('black-hole-triggered');
+        logoContainer.setAttribute('aria-pressed', 'true');
+        applyBlackHoleLogoFit();
+    }
+
+    if (celestialEventTimer) {
+        clearTimeout(celestialEventTimer);
+        celestialEventTimer = null;
+    }
+    celestialEvents.length = 0;
+}
+
+function createBlackHolePass() {
+    if (blackHoleState.renderTarget) return;
+
+    blackHoleState.renderTarget = new THREE.WebGLRenderTarget(1, 1, {
+        depthBuffer: true,
+        stencilBuffer: false,
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+    });
+    blackHoleState.renderTarget.texture.colorSpace = THREE.SRGBColorSpace;
+
+    blackHoleState.distortionTarget = new THREE.WebGLRenderTarget(1, 1, {
+        depthBuffer: false,
+        stencilBuffer: false,
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+    });
+
+    blackHoleState.scene = new THREE.Scene();
+    blackHoleState.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    blackHoleState.distortionScene = new THREE.Scene();
+    blackHoleState.distortionCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    blackHoleState.distortionMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+            uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+            uProgress: { value: 0 },
+            uTargetRadius: { value: blackHoleState.targetRadius },
+            uCoreRadius: { value: blackHoleState.coreRadius },
+            uReducedMotion: { value: config.blackHole.reducedMotion },
+        },
+        vertexShader: `
+            varying vec2 vUv;
+
+            void main() {
+                vUv = uv;
+                gl_Position = vec4(position.xy, 0.0, 1.0);
+            }`,
+        fragmentShader: `
+            precision highp float;
+
+            uniform vec2 uResolution;
+            uniform float uProgress;
+            uniform float uTargetRadius;
+            uniform float uCoreRadius;
+            uniform float uReducedMotion;
+            varying vec2 vUv;
+
+            float smoother(float value) {
+                value = clamp(value, 0.0, 1.0);
+                return value * value * value * (value * (value * 6.0 - 15.0) + 10.0);
+            }
+
+            float ring(float value, float center, float width, float feather) {
+                return smoothstep(center - width - feather, center - width, value)
+                    * (1.0 - smoothstep(center + width, center + width + feather, value));
+            }
+
+            void main() {
+                float minDimension = min(uResolution.x, uResolution.y);
+                float pixel = 1.0 / minDimension;
+                vec2 centered = (vUv - 0.5) * uResolution / minDimension;
+                float distanceFromCenter = length(centered);
+                float progress = smoother(uProgress);
+                float targetRadius = max(uTargetRadius, 0.02);
+                float finalCoreRadius = min(max(uCoreRadius, targetRadius * 0.3), targetRadius * 0.82);
+                float coreRadius = mix(max(pixel * 6.0, finalCoreRadius * 0.16), finalCoreRadius, progress);
+                float activeRadius = mix(max(coreRadius * 1.2, targetRadius * 0.055), targetRadius, progress);
+                float field = 1.0 - smoothstep(coreRadius * 0.2, activeRadius * 1.34, distanceFromCenter);
+                float innerLens = 1.0 - smoothstep(coreRadius * 0.12, coreRadius * 1.0, distanceFromCenter);
+                float photon = ring(distanceFromCenter, coreRadius * 1.015, max(pixel * 1.6, coreRadius * 0.009), max(pixel * 2.4, coreRadius * 0.014));
+                float strength = clamp(field * (0.82 + progress * 0.18) + photon * 0.18, 0.0, 1.0);
+
+                gl_FragColor = vec4(strength, innerLens, photon, 1.0);
+            }`,
+        transparent: false,
+        depthWrite: false,
+        depthTest: false,
+    });
+
+    blackHoleState.distortionMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blackHoleState.distortionMaterial);
+    blackHoleState.distortionScene.add(blackHoleState.distortionMesh);
+
+    blackHoleState.material = new THREE.ShaderMaterial({
+        uniforms: {
+            tScene: { value: blackHoleState.renderTarget.texture },
+            tDistortion: { value: blackHoleState.distortionTarget.texture },
+            uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+            uTime: { value: 0 },
+            uProgress: { value: 0 },
+            uTargetRadius: { value: blackHoleState.targetRadius },
+            uCoreRadius: { value: blackHoleState.coreRadius },
+            uReducedMotion: { value: config.blackHole.reducedMotion },
+        },
+        vertexShader: `
+            varying vec2 vUv;
+
+            void main() {
+                vUv = uv;
+                gl_Position = vec4(position.xy, 0.0, 1.0);
+            }`,
+        fragmentShader: `
+            precision highp float;
+
+            uniform sampler2D tScene;
+            uniform sampler2D tDistortion;
+            uniform vec2 uResolution;
+            uniform float uTime;
+            uniform float uProgress;
+            uniform float uTargetRadius;
+            uniform float uCoreRadius;
+            uniform float uReducedMotion;
+            varying vec2 vUv;
+
+            float hash(vec2 p) {
+                return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+            }
+
+            float noise(vec2 p) {
+                vec2 i = floor(p);
+                vec2 f = fract(p);
+                vec2 u = f * f * (3.0 - 2.0 * f);
+
+                float a = hash(i);
+                float b = hash(i + vec2(1.0, 0.0));
+                float c = hash(i + vec2(0.0, 1.0));
+                float d = hash(i + vec2(1.0, 1.0));
+
+                return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+            }
+
+            float fbm(vec2 p) {
+                float value = 0.0;
+                float amplitude = 0.5;
+
+                for (int i = 0; i < 5; i++) {
+                    value += amplitude * noise(p);
+                    p *= 2.03;
+                    amplitude *= 0.5;
+                }
+
+                return value;
+            }
+
+            mat2 rotate2d(float angle) {
+                float s = sin(angle);
+                float c = cos(angle);
+                return mat2(c, -s, s, c);
+            }
+
+            vec4 sampleScene(vec2 uv) {
+                return texture2D(tScene, clamp(uv, vec2(0.001), vec2(0.999)));
+            }
+
+            vec3 sampleRGBShift(vec2 uv, vec2 direction, float amount) {
+                vec2 offset = direction * amount;
+                vec2 offset120 = vec2(offset.x * -0.5 - offset.y * 0.8660254, offset.x * 0.8660254 + offset.y * -0.5);
+                vec2 offset240 = vec2(offset.x * -0.5 + offset.y * 0.8660254, offset.x * -0.8660254 + offset.y * -0.5);
+                vec3 color = vec3(0.0);
+                color.r = sampleScene(uv + offset120).r;
+                color.g = sampleScene(uv + offset240).g;
+                color.b = sampleScene(uv + offset).b;
+                return color;
+            }
+
+            float smoother(float value) {
+                value = clamp(value, 0.0, 1.0);
+                return value * value * value * (value * (value * 6.0 - 15.0) + 10.0);
+            }
+
+            float softBand(float distanceValue, float center, float halfWidth, float feather) {
+                return smoothstep(center - halfWidth - feather, center - halfWidth, distanceValue)
+                    * (1.0 - smoothstep(center + halfWidth, center + halfWidth + feather, distanceValue));
+            }
+
+            void main() {
+                float progress = smoother(uProgress);
+                float minDimension = min(uResolution.x, uResolution.y);
+                float pixel = 1.0 / minDimension;
+                vec2 centered = (vUv - 0.5) * uResolution / minDimension;
+                float distanceFromCenter = length(centered);
+                vec2 radial = distanceFromCenter > 0.0001 ? centered / distanceFromCenter : vec2(1.0, 0.0);
+                vec2 tangent = vec2(-radial.y, radial.x);
+
+                float targetRadius = max(uTargetRadius, 0.02);
+                float finalCoreRadius = min(max(uCoreRadius, targetRadius * 0.3), targetRadius * 0.82);
+                float coreRadius = mix(max(pixel * 6.0, finalCoreRadius * 0.16), finalCoreRadius, progress);
+                float activeRadius = mix(max(coreRadius * 1.2, targetRadius * 0.055), targetRadius, progress);
+                float edge = max(pixel * 1.7, coreRadius * 0.0075);
+                float motionScale = 1.0 - uReducedMotion * 0.82;
+                float flowTime = uTime * mix(0.46, 0.09, uReducedMotion);
+
+                vec4 distortionSample = texture2D(tDistortion, vUv);
+                float distortion = distortionSample.r;
+                float innerLensFromPass = distortionSample.g;
+                float photonFromPass = distortionSample.b;
+                float interiorMask = 1.0 - smoothstep(coreRadius * 0.84, coreRadius * 1.0, distanceFromCenter);
+                float broadLensDistortion = max(distortion, interiorMask * 0.78);
+
+                float lensNoise = fbm(centered * 5.8 + vec2(flowTime * 0.16, -flowTime * 0.09));
+                float shimmer = (lensNoise - 0.5) * motionScale;
+                float pull = broadLensDistortion * activeRadius * (0.42 + innerLensFromPass * 0.22 + interiorMask * 0.18)
+                    / (0.92 + distanceFromCenter / max(activeRadius, 0.02));
+                float edgeShimmer = broadLensDistortion
+                    * activeRadius
+                    * 0.008
+                    * shimmer
+                    * smoothstep(coreRadius * 0.9, coreRadius * 1.04, distanceFromCenter);
+                vec2 warped = centered - radial * (pull + edgeShimmer);
+                vec2 warpedUv = 0.5 + warped * minDimension / uResolution;
+
+                float photonRing = softBand(
+                    distanceFromCenter,
+                    coreRadius * 1.012,
+                    max(pixel * 1.45, coreRadius * 0.0065),
+                    max(pixel * 2.8, coreRadius * 0.012)
+                );
+                float photonGlow = softBand(
+                    distanceFromCenter,
+                    coreRadius * 1.035,
+                    max(pixel * 5.0, coreRadius * 0.038),
+                    max(pixel * 8.0, coreRadius * 0.038)
+                );
+                float lensHalo = smoothstep(coreRadius * 0.82, coreRadius * 1.02, distanceFromCenter)
+                    * (1.0 - smoothstep(activeRadius * 1.02, activeRadius * 1.34, distanceFromCenter))
+                    * mix(0.25, 1.0, progress);
+                float chromaAmount = (photonRing * 0.0038 + photonGlow * 0.0012) * motionScale;
+                vec2 chromaUv = radial * chromaAmount * minDimension / uResolution;
+                vec4 sceneMid = sampleScene(warpedUv);
+                vec3 sceneRgb = mix(sceneMid.rgb, sampleRGBShift(warpedUv, chromaUv, 1.0), clamp(photonRing * 0.92 + photonGlow * 0.24, 0.0, 1.0));
+
+                float coreWindow = 1.0 - smoothstep(coreRadius * 0.12, coreRadius * 1.02, distanceFromCenter);
+                vec2 coreWarp = centered * (0.34 + 0.01 * shimmer)
+                    - radial * activeRadius * (0.2 + broadLensDistortion * 0.12);
+                vec2 coreUv = 0.5 + coreWarp * minDimension / uResolution;
+                vec3 coreColor = vec3(0.0);
+                float coreGlints = 0.0;
+
+                float diskAngle = -0.1 + shimmer * 0.012;
+                vec2 diskPoint = rotate2d(diskAngle) * centered;
+                vec2 flattenedDisk = vec2(diskPoint.x, diskPoint.y * mix(2.4, 2.85, uReducedMotion));
+                float diskDistance = length(flattenedDisk);
+                float diskInner = coreRadius * 0.72;
+                float diskOuter = max(activeRadius * 1.08, coreRadius * 1.18);
+                float diskRange = max(diskOuter - diskInner, 0.001);
+                float diskNorm = clamp((diskDistance - diskInner) / diskRange, 0.0, 1.0);
+                float verticalWindow = 1.0 - smoothstep(coreRadius * 0.2, coreRadius * 0.88, abs(diskPoint.y));
+                float diskWindow = smoothstep(diskInner, coreRadius + edge * 6.0, diskDistance)
+                    * (1.0 - smoothstep(diskOuter - edge * 18.0, diskOuter, diskDistance))
+                    * verticalWindow
+                    * mix(0.2, 1.0, progress);
+                float cloudNoise = fbm(flattenedDisk * 7.5 + vec2(flowTime * 0.32, -flowTime * 0.12));
+                float fineCloud = fbm(flattenedDisk * 18.0 + vec2(-flowTime * 0.18, flowTime * 0.1));
+                float frontFeather = smoothstep(-coreRadius * 0.2, coreRadius * 0.34, diskPoint.y);
+                float doppler = smoothstep(-0.9, 0.9, diskPoint.x / max(distanceFromCenter, 0.001));
+                float edgeAttenuation = smoothstep(0.0, 0.08, diskNorm) * (1.0 - smoothstep(0.84, 1.0, diskNorm));
+                float cloud = diskWindow
+                    * edgeAttenuation
+                    * (0.2 + cloudNoise * 0.48 + fineCloud * 0.16)
+                    * mix(0.64, 1.0, frontFeather)
+                    * (0.78 + doppler * 0.16);
+                vec2 speckUv = flattenedDisk * minDimension * 0.28 + vec2(flowTime * 20.0, -flowTime * 5.0);
+                float specks = smoothstep(0.9972, 0.9995, hash(floor(speckUv)))
+                    * smoothstep(0.12, 0.28, diskNorm)
+                    * (1.0 - smoothstep(0.78, 1.0, diskNorm))
+                    * diskWindow
+                    * (1.0 - uReducedMotion * 0.72);
+
+                sceneRgb *= 1.0 - broadLensDistortion * 0.05;
+                sceneRgb *= 1.0 - interiorMask * 0.96;
+                cloud *= 1.0 - interiorMask * 0.9;
+                specks *= 1.0 - interiorMask;
+
+                vec3 color = sceneRgb;
+                color = mix(color, coreColor, coreWindow * 0.72);
+                color *= 1.0 - coreWindow * 0.72;
+                color += coreGlints * vec3(0.78, 0.84, 0.9);
+                color += cloud * vec3(1.0, 0.48, 0.16) * 0.26;
+                color += specks * vec3(1.0, 0.62, 0.28) * 0.46;
+                color += vec3(1.0, 0.86, 0.54) * max(photonRing, photonFromPass * 0.62) * 1.36;
+                color += vec3(0.95, 0.74, 0.48) * photonGlow * 0.22;
+                color += vec3(0.82, 0.78, 0.68) * lensHalo * 0.025;
+
+                float apertureShadow = softBand(distanceFromCenter, coreRadius * 0.92, max(pixel * 2.0, coreRadius * 0.07), edge * 5.0);
+                color *= 1.0 - apertureShadow * 0.36;
+                color *= 1.0 - 0.08 * distortion * (1.0 - smoothstep(coreRadius * 0.68, activeRadius * 1.44, distanceFromCenter));
+
+                float lensMask = (1.0 - smoothstep(activeRadius * 1.02, activeRadius * 1.58, distanceFromCenter)) * progress;
+                float lightMask = clamp(
+                    max(photonRing, photonFromPass * 0.62)
+                    + photonGlow * 0.42
+                    + cloud * 0.8
+                    + specks * 0.8
+                    + lensHalo * 0.35,
+                    0.0,
+                    1.0
+                ) * progress;
+                float coreMask = coreWindow * progress;
+                float effectAlpha = clamp(
+                    max(lensMask * 0.58, coreMask * 0.98)
+                    + lightMask * 0.38
+                    + broadLensDistortion * 0.18 * progress,
+                    0.0,
+                    0.98
+                );
+                float dimAlpha = progress * 0.24;
+                float outputAlpha = clamp(dimAlpha + effectAlpha * (1.0 - dimAlpha), 0.0, 0.98);
+                vec3 outputColor = mix(vec3(0.0), clamp(color, 0.0, 1.28), effectAlpha / max(outputAlpha, 0.001));
+
+                gl_FragColor = vec4(outputColor, outputAlpha);
+            }`,
+        transparent: true,
+        blending: THREE.NormalBlending,
+        depthWrite: false,
+        depthTest: false,
+    });
+    blackHoleState.material.toneMapped = false;
+
+    blackHoleState.mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), blackHoleState.material);
+    blackHoleState.scene.add(blackHoleState.mesh);
+    resizeBlackHolePass();
+}
+
+function applyBlackHoleLogoFit() {
+    const logo = document.getElementById('logo');
+    const minDimension = Math.max(1, Math.min(window.innerWidth, window.innerHeight));
+    const targetDiameter = minDimension * config.blackHole.targetDiameterRatio;
+    const baseCoreDiameter = targetDiameter * config.blackHole.coreDiameterRatio;
+    const maxCoreDiameter = targetDiameter * 0.88;
+    let logoScale = 1;
+    let logoMaxDimension = 0;
+
+    if (logoContainer) logoContainer.style.setProperty('--black-hole-logo-scale', '1');
+
+    if (logo) {
+        const logoRect = logo.getBoundingClientRect();
+        logoMaxDimension = Math.max(logoRect.width, logoRect.height);
+    }
+
+    if (logoMaxDimension > 0 && logoMaxDimension + config.blackHole.logoPadding > maxCoreDiameter) {
+        logoScale = THREE.MathUtils.clamp(
+            (maxCoreDiameter - config.blackHole.logoPadding) / logoMaxDimension,
+            config.blackHole.minLogoScale,
+            1,
+        );
+    }
+
+    const fittedLogoDiameter = logoMaxDimension * logoScale + config.blackHole.logoPadding;
+    const coreDiameter = THREE.MathUtils.clamp(
+        Math.max(baseCoreDiameter, fittedLogoDiameter),
+        baseCoreDiameter,
+        maxCoreDiameter,
+    );
+
+    blackHoleState.logoScale = logoScale;
+    blackHoleState.targetRadius = config.blackHole.targetDiameterRatio * 0.5;
+    blackHoleState.coreRadius = coreDiameter / (minDimension * 2);
+
+    if (logoContainer) logoContainer.style.setProperty('--black-hole-logo-scale', logoScale.toFixed(4));
+    updateBlackHoleUniformLayout();
+}
+
+function updateBlackHoleUniformLayout() {
+    if (blackHoleState.material) {
+        blackHoleState.material.uniforms.uTargetRadius.value = blackHoleState.targetRadius;
+        blackHoleState.material.uniforms.uCoreRadius.value = blackHoleState.coreRadius;
+    }
+
+    if (blackHoleState.distortionMaterial) {
+        blackHoleState.distortionMaterial.uniforms.uTargetRadius.value = blackHoleState.targetRadius;
+        blackHoleState.distortionMaterial.uniforms.uCoreRadius.value = blackHoleState.coreRadius;
+    }
+}
+
+function resizeBlackHolePass() {
+    if (!blackHoleState.renderTarget || !blackHoleState.material) return;
+
+    const pixelRatio = renderer.getPixelRatio();
+    blackHoleState.renderTarget.setSize(
+        Math.ceil(window.innerWidth * pixelRatio),
+        Math.ceil(window.innerHeight * pixelRatio),
+    );
+    blackHoleState.distortionTarget.setSize(
+        Math.max(1, Math.ceil(window.innerWidth * pixelRatio)),
+        Math.max(1, Math.ceil(window.innerHeight * pixelRatio)),
+    );
+
+    if (blackHoleState.active) applyBlackHoleLogoFit();
+
+    blackHoleState.material.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+    blackHoleState.distortionMaterial.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+    updateBlackHoleUniformLayout();
+}
+
+function updateBlackHole(elapsedTime) {
+    if (!blackHoleState.active || !blackHoleState.material) return;
+
+    const elapsed = performance.now() - blackHoleState.startTime;
+    blackHoleState.progress = THREE.MathUtils.clamp(elapsed / config.blackHole.growthDuration, 0, 1);
+    blackHoleState.material.uniforms.uTime.value = elapsedTime;
+    blackHoleState.material.uniforms.uProgress.value = blackHoleState.progress;
+    blackHoleState.distortionMaterial.uniforms.uProgress.value = blackHoleState.progress;
+}
+
+function renderFrame() {
+    if (!blackHoleState.active) {
+        renderer.render(scene, camera);
+        return;
+    }
+
+    renderer.setRenderTarget(blackHoleState.renderTarget);
+    renderer.clear();
+    renderer.render(scene, camera);
+
+    renderer.setRenderTarget(blackHoleState.distortionTarget);
+    renderer.clear();
+    renderer.render(blackHoleState.distortionScene, blackHoleState.distortionCamera);
+
+    renderer.setRenderTarget(null);
+    renderer.render(scene, camera);
+    renderer.autoClear = false;
+    renderer.clearDepth();
+    renderer.render(blackHoleState.scene, blackHoleState.camera);
+    renderer.autoClear = true;
+}
+
 function updatePointerAndCamera(delta, elapsedTime) {
     pointerCurrent.lerp(pointerTarget, config.pointerSmoothing);
     const idleTime = performance.now() - lastPointerActivity;
-    const targetFlight = smoothstep(0, config.flight.fadeIn, idleTime - config.flight.idleDelay);
+    const targetFlight = blackHoleState.active
+        ? 0
+        : smoothstep(0, config.flight.fadeIn, idleTime - config.flight.idleDelay);
     const response = targetFlight > flightIntensity ? config.flight.rise : config.flight.fall;
     flightIntensity = THREE.MathUtils.damp(flightIntensity, targetFlight, response, delta);
     flightVisualIntensity = smootherstep(0.02, 1, flightIntensity);
-    flightDistance += delta * config.flight.speed * flightVisualIntensity;
+    if (!blackHoleState.active) {
+        flightDistance += delta * config.flight.speed * flightVisualIntensity;
+    }
 
-    const driftX = Math.sin(elapsedTime * 0.21) * config.flight.drift * flightVisualIntensity;
-    const driftY = Math.cos(elapsedTime * 0.17) * config.flight.drift * 0.62 * flightVisualIntensity;
-    const targetCameraX = -pointerCurrent.x * 0.035 + driftX;
-    const targetCameraY = pointerCurrent.y * 0.028 + driftY;
+    const targetParallaxLock = Math.max(flightVisualIntensity, blackHoleState.active ? 1 : 0);
+    const lockResponse = targetParallaxLock > parallaxLock ? 7.5 : 3.5;
+    parallaxLock = THREE.MathUtils.damp(parallaxLock, targetParallaxLock, lockResponse, delta);
+    pointerParallax.copy(pointerCurrent).multiplyScalar(1 - smootherstep(0, 1, parallaxLock));
+
+    const targetCameraX = -pointerParallax.x * 0.035;
+    const targetCameraY = pointerParallax.y * 0.028;
     camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetCameraX, 0.035);
     camera.position.y = THREE.MathUtils.lerp(camera.position.y, targetCameraY, 0.035);
-    camera.rotation.x = THREE.MathUtils.lerp(camera.rotation.x, -pointerCurrent.y * 0.000035 + Math.sin(elapsedTime * 0.19) * 0.012 * flightVisualIntensity, 0.04);
-    camera.rotation.y = THREE.MathUtils.lerp(camera.rotation.y, -pointerCurrent.x * 0.00004 + Math.cos(elapsedTime * 0.15) * 0.016 * flightVisualIntensity, 0.04);
-    camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, Math.sin(elapsedTime * 0.13) * 0.018 * flightVisualIntensity, 0.035);
+    camera.rotation.x = THREE.MathUtils.lerp(camera.rotation.x, -pointerParallax.y * 0.000035, 0.04);
+    camera.rotation.y = THREE.MathUtils.lerp(camera.rotation.y, -pointerParallax.x * 0.00004, 0.04);
+    camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, 0, 0.035);
 
-    logoTarget.set(-pointerCurrent.x * config.logoMovementRatio, -pointerCurrent.y * config.logoMovementRatio);
-    logoTarget.x += Math.sin(elapsedTime * 0.4) * 5 * flightVisualIntensity;
-    logoTarget.y += Math.cos(elapsedTime * 0.34) * 4 * flightVisualIntensity;
+    if (blackHoleState.active) {
+        logoOffset.set(0, 0);
+        logoTarget.set(0, 0);
+        logoContainer.style.transform = 'translate(-50%, -50%)';
+        logoContainer.style.setProperty('--flight-intensity', '0');
+        return;
+    }
+
+    logoTarget.set(-pointerParallax.x * config.logoMovementRatio, -pointerParallax.y * config.logoMovementRatio);
     logoOffset.lerp(logoTarget, config.logoSmoothing);
 
     const logoScale = 1 + flightVisualIntensity * 0.025;
-    const logoTilt = Math.sin(elapsedTime * 0.5) * flightVisualIntensity * 1.2;
-    logoContainer.style.transform = `translate(calc(-50% + ${logoOffset.x.toFixed(2)}px), calc(-50% + ${logoOffset.y.toFixed(2)}px)) scale(${logoScale.toFixed(4)}) rotate(${logoTilt.toFixed(3)}deg)`;
+    logoContainer.style.transform = `translate(calc(-50% + ${logoOffset.x.toFixed(2)}px), calc(-50% + ${logoOffset.y.toFixed(2)}px)) scale(${logoScale.toFixed(4)})`;
     logoContainer.style.setProperty('--flight-intensity', flightVisualIntensity.toFixed(3));
 }
 
@@ -501,115 +1136,196 @@ function updateStars(elapsedTime) {
         layer.material.uniforms.uTime.value = elapsedTime;
         layer.material.uniforms.uFlightDistance.value = flightDistance;
         layer.material.uniforms.uFlightIntensity.value = flightVisualIntensity;
-        layer.position.x = -pointerCurrent.x * layer.userData.parallaxFactor + Math.sin(elapsedTime * (0.08 + index * 0.017)) * 22 * flightVisualIntensity;
-        layer.position.y = pointerCurrent.y * layer.userData.parallaxFactor + Math.cos(elapsedTime * (0.075 + index * 0.013)) * 18 * flightVisualIntensity;
-        layer.rotation.z = layer.userData.baseRotation + Math.sin(elapsedTime * 0.05 + index) * 0.012 * flightVisualIntensity;
+        layer.position.x = -pointerParallax.x * layer.userData.parallaxFactor;
+        layer.position.y = pointerParallax.y * layer.userData.parallaxFactor;
+        layer.rotation.z = layer.userData.baseRotation;
     });
 }
 
 function updateNebula(delta, elapsedTime) {
     nebulaClouds.forEach((cloud, index) => {
         cloud.material.uniforms.uTime.value = elapsedTime;
-        cloud.rotation.z += cloud.userData.rotationSpeed * delta * (1 + flightVisualIntensity * 1.8);
+        cloud.rotation.z += cloud.userData.rotationSpeed * delta;
         const phase = cloud.userData.phase;
-        cloud.position.x = cloud.userData.base.x - pointerCurrent.x * cloud.userData.parallax + Math.sin(elapsedTime * 0.055 + phase) * 58 * (0.35 + flightVisualIntensity);
-        cloud.position.y = cloud.userData.base.y + pointerCurrent.y * cloud.userData.parallax + Math.cos(elapsedTime * 0.047 + phase) * 46 * (0.35 + flightVisualIntensity);
-        cloud.position.z = cloud.userData.base.z + Math.sin(elapsedTime * 0.04 + index) * 26 * flightVisualIntensity;
+        cloud.position.x = cloud.userData.base.x - pointerParallax.x * cloud.userData.parallax + Math.sin(elapsedTime * 0.055 + phase) * 20;
+        cloud.position.y = cloud.userData.base.y + pointerParallax.y * cloud.userData.parallax + Math.cos(elapsedTime * 0.047 + phase) * 16;
+        cloud.position.z = cloud.userData.base.z;
     });
 }
 
-function updateTrail(delta, elapsedTime) {
-    if (currentSpaceObjectElement && spaceObjectContainer.classList.contains('animate')) {
-        const rect = currentSpaceObjectElement.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-            const currentScreenX = rect.left + rect.width / 2;
-            const currentScreenY = rect.top + rect.height / 2;
+function updateCelestialEvents(delta) {
+    if (!celestialEventCtx) return;
 
-            if (!lastTrailScreenPosition) {
-                lastTrailScreenPosition = new THREE.Vector2(currentScreenX, currentScreenY);
-            }
+    celestialEventCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    if (blackHoleState.active) return;
 
-            const deltaX = currentScreenX - lastTrailScreenPosition.x;
-            const deltaY = currentScreenY - lastTrailScreenPosition.y;
-            const moved = Math.hypot(deltaX, deltaY);
-            const travelX = moved > 0.35 ? deltaX / moved : activeObjectVelocity.x;
-            const travelY = moved > 0.35 ? deltaY / moved : activeObjectVelocity.y;
-            const backX = -travelX;
-            const backY = -travelY;
-            const sideX = -travelY;
-            const sideY = travelX;
-            const objectRadius = Math.max(rect.width, rect.height) * 0.42;
-            const emitterX = currentScreenX + backX * objectRadius;
-            const emitterY = currentScreenY + backY * objectRadius;
+    celestialEventCtx.save();
+    celestialEventCtx.globalCompositeOperation = 'lighter';
 
-            const emitRate = Math.round(THREE.MathUtils.lerp(config.trail.emitRate, config.trail.emitRate + 1, flightVisualIntensity));
-            for (let i = 0; i < emitRate; i++) {
-                spawnTrailParticle(emitterX, emitterY, backX, backY, sideX, sideY, elapsedTime, i, currentSpaceObjectElement.id);
-            }
+    for (let i = celestialEvents.length - 1; i >= 0; i--) {
+        const event = celestialEvents[i];
+        event.age += delta;
+        event.x += event.vx * delta;
+        event.y += event.vy * delta;
 
-            lastTrailScreenPosition.set(currentScreenX, currentScreenY);
-        }
-    } else {
-        lastTrailScreenPosition = null;
-    }
-
-    objectTrailCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-    objectTrailCtx.save();
-    objectTrailCtx.globalCompositeOperation = 'lighter';
-
-    for (let i = objectTrailParticles.length - 1; i >= 0; i--) {
-        const particle = objectTrailParticles[i];
-        particle.life -= delta;
-        if (particle.life <= 0) {
-            objectTrailParticles.splice(i, 1);
+        const progress = event.age / event.life;
+        if (progress >= 1) {
+            celestialEvents.splice(i, 1);
             continue;
         }
 
-        const progress = particle.life / particle.maxLife;
-        const alpha = progress * progress * 0.48;
-        const radius = particle.size * (0.42 + progress * 0.42);
-        const gradient = objectTrailCtx.createRadialGradient(
-            particle.x,
-            particle.y,
-            0,
-            particle.x,
-            particle.y,
-            radius,
-        );
-        gradient.addColorStop(0, `hsla(${particle.hue}, 78%, 70%, ${alpha})`);
-        gradient.addColorStop(0.48, `hsla(${particle.hue}, 70%, 58%, ${alpha * 0.38})`);
-        gradient.addColorStop(1, `hsla(${particle.hue}, 62%, 44%, 0)`);
-
-        objectTrailCtx.fillStyle = gradient;
-        objectTrailCtx.beginPath();
-        objectTrailCtx.arc(particle.x, particle.y, radius, 0, Math.PI * 2);
-        objectTrailCtx.fill();
+        drawCelestialEvent(event, progress);
     }
 
-    objectTrailCtx.restore();
+    celestialEventCtx.restore();
 }
 
-function spawnTrailParticle(originX, originY, backX, backY, sideX, sideY, elapsedTime, index, objectId) {
-    if (objectTrailParticles.length >= config.trail.maxParticles) {
-        objectTrailParticles.splice(0, objectTrailParticles.length - config.trail.maxParticles + 1);
+function drawCelestialEvent(event, progress) {
+    const fadeIn = smoothstep(0, 0.14, progress);
+    const fadeOut = 1 - smoothstep(0.64, 1, progress);
+    const alpha = event.opacity * fadeIn * fadeOut;
+    if (alpha <= 0.002) return;
+
+    const tailX = event.x - event.dirX * event.tailLength;
+    const tailY = event.y - event.dirY * event.tailLength;
+    const tailGradient = celestialEventCtx.createLinearGradient(event.x, event.y, tailX, tailY);
+    tailGradient.addColorStop(0, colorString(event.headColor, alpha * 0.86));
+    tailGradient.addColorStop(0.28, colorString(event.tailColor, alpha * 0.34));
+    tailGradient.addColorStop(1, colorString(event.tailColor, 0));
+
+    celestialEventCtx.strokeStyle = tailGradient;
+    celestialEventCtx.lineWidth = event.tailWidth;
+    celestialEventCtx.lineCap = 'round';
+    celestialEventCtx.beginPath();
+    celestialEventCtx.moveTo(event.x, event.y);
+    celestialEventCtx.lineTo(tailX, tailY);
+    celestialEventCtx.stroke();
+
+    if (event.type === 'comet') {
+        const dustX = event.x - event.dirX * event.tailLength * 0.72 + event.sideX * event.tailWidth * 1.5;
+        const dustY = event.y - event.dirY * event.tailLength * 0.72 + event.sideY * event.tailWidth * 1.5;
+        const dustGradient = celestialEventCtx.createLinearGradient(event.x, event.y, dustX, dustY);
+        dustGradient.addColorStop(0, colorString(event.headColor, alpha * 0.3));
+        dustGradient.addColorStop(1, colorString(event.tailColor, 0));
+        celestialEventCtx.strokeStyle = dustGradient;
+        celestialEventCtx.lineWidth = event.tailWidth * 1.8;
+        celestialEventCtx.beginPath();
+        celestialEventCtx.moveTo(event.x, event.y);
+        celestialEventCtx.lineTo(dustX, dustY);
+        celestialEventCtx.stroke();
     }
 
-    const hue = getTrailHue(objectId, index);
-    const maxLife = config.trail.baseLife * THREE.MathUtils.randFloat(0.5, 0.94);
-    objectTrailParticles.push({
-        x: originX + sideX * THREE.MathUtils.randFloatSpread(7) + backX * THREE.MathUtils.randFloat(0, 6),
-        y: originY + sideY * THREE.MathUtils.randFloatSpread(7) + backY * THREE.MathUtils.randFloat(0, 6),
-        hue,
-        size: THREE.MathUtils.randFloat(5, quality.isCompact ? 13 : 19) * (1 + flightVisualIntensity * 0.12),
-        life: maxLife,
-        maxLife,
+    const glowRadius = event.headRadius * (event.type === 'comet' ? 5.4 : 3.6);
+    const headGradient = celestialEventCtx.createRadialGradient(
+        event.x,
+        event.y,
+        0,
+        event.x,
+        event.y,
+        glowRadius,
+    );
+    headGradient.addColorStop(0, colorString(event.headColor, alpha));
+    headGradient.addColorStop(0.32, colorString(event.headColor, alpha * 0.38));
+    headGradient.addColorStop(1, colorString(event.tailColor, 0));
+
+    celestialEventCtx.fillStyle = headGradient;
+    celestialEventCtx.beginPath();
+    celestialEventCtx.arc(event.x, event.y, glowRadius, 0, Math.PI * 2);
+    celestialEventCtx.fill();
+}
+
+function scheduleCelestialEvent(delay) {
+    if (celestialEventTimer) clearTimeout(celestialEventTimer);
+
+    celestialEventTimer = setTimeout(() => {
+        spawnCelestialEvent();
+        scheduleCelestialEvent(randRange(config.celestialEvents.interval[0], config.celestialEvents.interval[1]));
+    }, delay);
+}
+
+function spawnCelestialEvent() {
+    if (celestialEvents.length >= config.celestialEvents.maxActive) return;
+
+    const type = Math.random() < 0.7 ? 'meteor' : 'comet';
+    const path = getCelestialEventPath(type);
+    const palette = getCelestialEventPalette();
+    const brightness = config.celestialEvents.brightness;
+
+    celestialEvents.push({
+        type,
+        x: path.startX,
+        y: path.startY,
+        vx: path.dirX * path.speed,
+        vy: path.dirY * path.speed,
+        dirX: path.dirX,
+        dirY: path.dirY,
+        sideX: -path.dirY,
+        sideY: path.dirX,
+        life: path.life,
+        age: 0,
+        headRadius: path.headRadius,
+        tailLength: path.tailLength,
+        tailWidth: path.tailWidth,
+        opacity: path.opacity * brightness,
+        headColor: palette.head,
+        tailColor: palette.tail,
     });
 }
 
-function getTrailHue(objectId, index) {
-    const objectConfig = config.spaceObjects.find((object) => object.id === objectId);
-    const baseHue = ((objectConfig?.trailHue ?? 0.58) * 360) % 360;
-    return Math.round((baseHue + index * 3 + THREE.MathUtils.randFloatSpread(12) + 360) % 360);
+function getCelestialEventPath(type) {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const compactScale = quality.isCompact ? 0.74 : 1;
+    const reducedScale = quality.prefersReducedMotion ? 0.55 : 1;
+    const rightward = Math.random() > 0.5;
+    const angle = randRange(0.58, 0.98);
+    const dirX = Math.cos(rightward ? angle : Math.PI - angle);
+    const dirY = Math.sin(angle);
+    const buffer = 120;
+    const startX = rightward ? randRange(-buffer, width * 0.92) : randRange(width * 0.08, width + buffer);
+    const startY = randRange(-buffer, height * 0.34);
+
+    if (type === 'comet') {
+        return {
+            startX,
+            startY,
+            dirX,
+            dirY,
+            speed: randRange(165, 300) * compactScale * reducedScale,
+            life: randRange(1.9, 3.2) / reducedScale,
+            headRadius: randRange(2, 3.2) * compactScale,
+            tailLength: randRange(70, 135) * compactScale,
+            tailWidth: randRange(1.5, 2.4) * compactScale,
+            opacity: randRange(0.24, 0.4),
+        };
+    }
+
+    return {
+        startX,
+        startY,
+        dirX,
+        dirY,
+        speed: randRange(430, 760) * compactScale * reducedScale,
+        life: randRange(0.75, 1.35) / reducedScale,
+        headRadius: randRange(1.1, 1.85) * compactScale,
+        tailLength: randRange(70, 155) * compactScale,
+        tailWidth: randRange(0.9, 1.45) * compactScale,
+        opacity: randRange(0.26, 0.44),
+    };
+}
+
+function getCelestialEventPalette() {
+    const palettes = [
+        { head: [210, 224, 248], tail: [118, 140, 178] },
+        { head: [238, 218, 170], tail: [182, 132, 78] },
+        { head: [224, 182, 142], tail: [158, 86, 54] },
+        { head: [190, 210, 232], tail: [92, 118, 150] },
+    ];
+    return palettes[Math.floor(Math.random() * palettes.length)];
+}
+
+function colorString(rgb, alpha) {
+    return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${THREE.MathUtils.clamp(alpha, 0, 1)})`;
 }
 
 function onWindowResize() {
@@ -617,7 +1333,8 @@ function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
-    resizeTrailCanvas();
+    resizeCelestialEventCanvas();
+    resizeBlackHolePass();
 }
 
 function onPointerMove(event) {
@@ -641,127 +1358,10 @@ function animate() {
     updatePointerAndCamera(delta, elapsedTime);
     updateStars(elapsedTime);
     updateNebula(delta, elapsedTime);
-    updateTrail(delta, elapsedTime);
+    updateCelestialEvents(delta);
+    updateBlackHole(elapsedTime);
 
-    renderer.render(scene, camera);
-}
-
-function selectSpaceObject() {
-    const selected = config.spaceObjects[Math.floor(Math.random() * config.spaceObjects.length)];
-    const element = document.getElementById(selected.id);
-    document.querySelectorAll('.space-object').forEach((el) => {
-        el.style.display = 'none';
-    });
-
-    if (element) {
-        element.style.display = 'block';
-        element.style.width = `${selected.size}px`;
-        currentSpaceObjectElement = element;
-    }
-
-    return { ...selected, element };
-}
-
-function getOffscreenPositions(buffer) {
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const startPos = { x: 0, y: 0 };
-    const endPos = { x: 0, y: 0 };
-    const edge = Math.floor(Math.random() * 4);
-
-    switch (edge) {
-        case 0:
-            startPos.x = Math.random() * vw;
-            startPos.y = -buffer;
-            endPos.x = Math.random() * vw;
-            endPos.y = vh + buffer;
-            break;
-        case 1:
-            startPos.x = vw + buffer;
-            startPos.y = Math.random() * vh;
-            endPos.x = -buffer;
-            endPos.y = Math.random() * vh;
-            break;
-        case 2:
-            startPos.x = Math.random() * vw;
-            startPos.y = vh + buffer;
-            endPos.x = Math.random() * vw;
-            endPos.y = -buffer;
-            break;
-        default:
-            startPos.x = -buffer;
-            startPos.y = Math.random() * vh;
-            endPos.x = vw + buffer;
-            endPos.y = Math.random() * vh;
-            break;
-    }
-
-    return { startPos, endPos };
-}
-
-function getObjectRotation(id, startPos, endPos, element) {
-    if (id === 'rocket') {
-        const angle = Math.atan2(endPos.y - startPos.y, endPos.x - startPos.x) * (180 / Math.PI) + 90;
-        return {
-            startRotation: angle,
-            endRotation: angle,
-        };
-    }
-
-    if (element) element.style.transform = '';
-    const startRotation = Math.random() * 360;
-    const spin = (Math.random() > 0.5 ? 1 : -1) * THREE.MathUtils.randFloat(120, 300);
-    return {
-        startRotation,
-        endRotation: startRotation + spin,
-    };
-}
-
-function launchSpaceObject() {
-    const container = spaceObjectContainer;
-    const spaceObject = selectSpaceObject();
-    if (!spaceObject.element || !container) return;
-
-    container.classList.remove('animate', 'rocket');
-    void container.offsetWidth;
-
-    const size = spaceObject.element.offsetWidth || spaceObject.size || 58;
-    const buffer = size * 5 + 70;
-    const { startPos, endPos } = getOffscreenPositions(buffer);
-    const dx = endPos.x - startPos.x;
-    const dy = endPos.y - startPos.y;
-    const length = Math.hypot(dx, dy) || 1;
-    activeObjectVelocity.set(dx / length, dy / length);
-
-    const duration = THREE.MathUtils.randFloat(quality.isCompact ? 7 : 8, quality.isCompact ? 12 : 14);
-    const scale = THREE.MathUtils.randFloat(0.82, 1.08);
-    const { startRotation, endRotation } = getObjectRotation(spaceObject.id, startPos, endPos, spaceObject.element);
-
-    if (spaceObject.id === 'rocket') container.classList.add('rocket');
-
-    Object.entries({
-        '--start-x': `${startPos.x}px`,
-        '--start-y': `${startPos.y}px`,
-        '--end-x': `${endPos.x}px`,
-        '--end-y': `${endPos.y}px`,
-        '--duration': `${duration}s`,
-        '--start-rotate': `${startRotation}deg`,
-        '--end-rotate': `${endRotation}deg`,
-        '--object-scale': scale.toFixed(3),
-    }).forEach(([prop, value]) => container.style.setProperty(prop, value));
-
-    lastTrailScreenPosition = null;
-    container.classList.add('animate');
-
-    const onDone = () => {
-        container.classList.remove('animate', 'rocket');
-        currentSpaceObjectElement = null;
-        lastTrailScreenPosition = null;
-        setTimeout(launchSpaceObject, THREE.MathUtils.randFloat(1800, 5600));
-    };
-
-    if (container.animationTimeout) clearTimeout(container.animationTimeout);
-    container.animationTimeout = setTimeout(onDone, duration * 1000 + 120);
+    renderFrame();
 }
 
 init();

@@ -45,13 +45,18 @@ Subtle, generative nebula clouds float in the background.
 - **Parallax Integration**: The logo moves in response to user input.
 - **Recentering (TODO)**: The logic to re-center the logo after a period of mouse inactivity or when the cursor leaves the window needs to be re-implemented.
 
-### Floating Space Objects
-A variety of space-themed objects traverse the scene.
-- **Objects**: Astronaut, meteorite, rocket, and satellite, animated via CSS.
-- **Particle Trails**: Objects emit a stream of particles from a GPU-based particle system, creating a visible trail.
+### Minimal Celestial Events
+Sparse natural events traverse the scene without large foreground sprites.
+- **Events**: Small meteors and micro-comets rendered on a lightweight 2D overlay canvas.
+- **Trails**: Dim, realistic stellar-adjacent colors with short fading tails.
 
-### Black Hole Animation (TODO)
-- A very rare animation where a black hole appears and visually distorts the starfield behind it.
+### Black Hole Easter Egg
+- **Trigger**: Click or tap the centered JPD logo 3 times within 3 seconds.
+- **Logo Behavior**: The logo locks to the exact center once triggered and is kept fully inside the active lens core, with warped stars visible through the transparent logo area.
+- **Growth**: The black-hole lens appears immediately at the logo-fitting core size, then its outer distortion/disc system grows to 55% of the smaller viewport dimension after 10 seconds.
+- **Rendering**: The existing WebGL scene is rendered into an offscreen space texture, a separate full-resolution distortion texture is rendered, and both are composited in a final shader pass.
+- **Visuals**: The shader adds a dark lens core, sparse warped stars, a smooth photon rim, RGB-shifted edge lensing, and a soft gathered-light cloud inspired by Bruno Simon's WebGL black-hole rendering approach.
+- **Duration**: The effect remains active after reaching full size until the page reloads.
 
 ---
 

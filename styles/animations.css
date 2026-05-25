@@ -1,83 +1,35 @@
 @keyframes logo-spectrum {
   0% {
     filter:
-      drop-shadow(0 0 9px rgba(255, 21, 79, 0.82))
-      drop-shadow(0 0 22px rgba(63, 252, 255, 0.32))
-      drop-shadow(0 0 44px rgba(155, 85, 255, 0.28));
+      drop-shadow(0 0 6px rgba(0, 0, 0, 0.56))
+      drop-shadow(0 0 15px rgba(16, 17, 21, 0.32))
+      drop-shadow(0 0 28px rgba(38, 39, 44, 0.16));
   }
 
   35% {
     filter:
-      drop-shadow(0 0 14px rgba(63, 252, 255, 0.72))
-      drop-shadow(0 0 28px rgba(255, 211, 106, 0.38))
-      drop-shadow(0 0 58px rgba(255, 21, 79, 0.32));
+      drop-shadow(0 0 8px rgba(0, 0, 0, 0.62))
+      drop-shadow(0 0 18px rgba(18, 19, 24, 0.36))
+      drop-shadow(0 0 32px rgba(42, 43, 48, 0.18));
   }
 
   68% {
     filter:
-      drop-shadow(0 0 13px rgba(155, 85, 255, 0.72))
-      drop-shadow(0 0 30px rgba(255, 21, 79, 0.42))
-      drop-shadow(0 0 66px rgba(63, 252, 255, 0.3));
+      drop-shadow(0 0 7px rgba(0, 0, 0, 0.6))
+      drop-shadow(0 0 16px rgba(14, 15, 19, 0.34))
+      drop-shadow(0 0 30px rgba(34, 35, 40, 0.17));
   }
 
   100% {
     filter:
-      drop-shadow(0 0 9px rgba(255, 21, 79, 0.82))
-      drop-shadow(0 0 22px rgba(63, 252, 255, 0.32))
-      drop-shadow(0 0 44px rgba(155, 85, 255, 0.28));
-  }
-}
-
-@keyframes move-space-object {
-  0% {
-    opacity: 0;
-    transform: translate(var(--start-x), var(--start-y)) rotate(var(--start-rotate)) scale(var(--object-scale));
-    filter: blur(0.8px) brightness(0.86) saturate(1.18);
-  }
-
-  6% {
-    opacity: 1;
-  }
-
-  88% {
-    opacity: 1;
-  }
-
-  100% {
-    opacity: 0;
-    transform: translate(var(--end-x), var(--end-y)) rotate(var(--end-rotate)) scale(var(--object-scale));
-    filter: blur(0.8px) brightness(0.86) saturate(1.18);
-  }
-}
-
-@keyframes rocket-squiggle {
-  0% {
-    transform: translate3d(0, 0, 0) rotate(0deg);
-  }
-
-  25% {
-    transform: translate3d(4px, -5px, 0) rotate(4deg);
-  }
-
-  50% {
-    transform: translate3d(0, 0, 0) rotate(0deg);
-  }
-
-  75% {
-    transform: translate3d(-4px, 5px, 0) rotate(-4deg);
-  }
-
-  100% {
-    transform: translate3d(0, 0, 0) rotate(0deg);
+      drop-shadow(0 0 6px rgba(0, 0, 0, 0.56))
+      drop-shadow(0 0 15px rgba(16, 17, 21, 0.32))
+      drop-shadow(0 0 28px rgba(38, 39, 44, 0.16));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   #logo {
     animation-duration: 10s;
-  }
-
-  #space-object-container.animate.rocket #rocket {
-    animation-duration: 1.5s;
   }
 }
