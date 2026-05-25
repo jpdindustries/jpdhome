@@ -602,13 +602,6 @@ class VersionDetector {
             <div id="logo-container">
                 <img src="webgl/assets/jpdlogo.png" alt="JPD Logo" id="logo">
             </div>
-
-            <div id="space-object-container">
-                <img src="webgl/assets/jpdaustronaut.png" alt="Floating Astronaut" id="astronaut" class="space-object">
-                <img src="webgl/assets/meteorite.png" alt="Floating Meteorite" id="meteorite" class="space-object">
-                <img src="webgl/assets/rocket.png" alt="Flying Rocket" id="rocket" class="space-object">
-                <img src="webgl/assets/satellite.png" alt="Floating Satellite" id="satellite" class="space-object">
-            </div>
         `;
 
     // Load WebGL script as module
