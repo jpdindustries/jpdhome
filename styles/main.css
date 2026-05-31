@@ -50,13 +50,13 @@ body::after {
   height: 100%;
 }
 
-.star-controls {
+.version-toggle-standalone {
   position: fixed;
+  right: 20px;
   bottom: 20px;
-  left: 20px;
   z-index: 1000;
-  display: grid;
-  grid-template-columns: auto auto auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 5px;
   padding: 5px;
@@ -64,8 +64,7 @@ body::after {
   border-radius: 5px;
   background: transparent;
   color: #fff;
-  font-family: monospace;
-  font-size: 12px;
+  font: 12px/1 monospace;
   opacity: 0.15;
   pointer-events: auto;
   transition:
@@ -73,10 +72,94 @@ body::after {
     opacity 0.3s ease;
 }
 
-.star-controls:hover,
-.star-controls:focus-within {
+.version-toggle-standalone:hover,
+.version-toggle-standalone:focus-within {
   background-color: rgba(0, 0, 0, 0.5);
   opacity: 1;
+}
+
+.version-toggle-standalone[hidden] {
+  display: none;
+}
+
+.version-toggle-current {
+  border: 1px solid #ff0000;
+  border-radius: 3px;
+  background: #ff0000;
+  color: #fff;
+  padding: 3px 8px;
+}
+
+.version-toggle-close {
+  border: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  font: 12px/1 monospace;
+  padding: 3px 5px;
+}
+
+.version-toggle-close:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+
+.version-toggle-reopen {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1000;
+  width: 14px;
+  height: 14px;
+  border: 1px solid rgba(255, 0, 0, 0.08);
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  font: 10px/1 monospace;
+  padding: 0;
+  pointer-events: auto;
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.version-toggle-reopen:hover,
+.version-toggle-reopen:focus-visible {
+  border-color: rgba(255, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.version-toggle-reopen:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
+}
+
+.version-toggle-reopen[hidden] {
+  display: none;
+}
+
+.star-controls {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 5px;
+  border-left: 1px solid rgba(255, 0, 0, 0.45);
+  background: transparent;
+  color: #fff;
+  font-family: monospace;
+  font-size: 12px;
+  pointer-events: auto;
+}
+
+.star-controls[hidden] {
+  display: none;
+}
+
+.star-count-label {
+  color: rgba(255, 255, 255, 0.72);
+  font: 10px/1 monospace;
+  letter-spacing: 0.08em;
 }
 
 .star-control-button {

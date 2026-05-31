@@ -71,6 +71,7 @@ const config = {
         clicksRequired: 3,
         clickWindowMs: 3000,
         growthDuration: 10000,
+        parallaxUnlockDuration: quality.prefersReducedMotion ? 18000 : 12000,
         targetDiameterRatio: 0.55,
         coreDiameterRatio: 0.42,
         logoPadding: 32,
@@ -380,10 +381,26 @@ function clearStarLayers() {
     }
 }
 
-function createStarControls() {
+function createStarControls(attempt = 0) {
+    let versionToggle = document.getElementById('version-toggle');
+
+    if (!versionToggle) {
+        if (attempt < 120) {
+            requestAnimationFrame(() => createStarControls(attempt + 1));
+            return;
+        }
+
+        versionToggle = createStandaloneVersionToggle();
+    }
+
     starControlContainer = document.createElement('div');
     starControlContainer.className = 'star-controls';
+    starControlContainer.setAttribute('role', 'group');
     starControlContainer.setAttribute('aria-label', 'Star count controls');
+
+    const label = document.createElement('span');
+    label.className = 'star-count-label';
+    label.textContent = 'STARS';
 
     const minusButton = document.createElement('button');
     minusButton.type = 'button';
@@ -407,9 +424,46 @@ function createStarControls() {
         setStarTotal(currentStarTotal + config.starControls.step);
     });
 
-    starControlContainer.append(minusButton, starCountValue, plusButton);
-    document.body.appendChild(starControlContainer);
+    starControlContainer.append(label, minusButton, starCountValue, plusButton);
+    versionToggle.insertBefore(starControlContainer, versionToggle.lastElementChild);
     updateStarCountDisplay();
+}
+
+function createStandaloneVersionToggle() {
+    const toggleContainer = document.createElement('div');
+    toggleContainer.id = 'version-toggle';
+    toggleContainer.className = 'version-toggle-standalone';
+
+    const currentMode = document.createElement('span');
+    currentMode.className = 'version-toggle-current';
+    currentMode.textContent = 'WEBGL';
+
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.className = 'version-toggle-close';
+    closeButton.textContent = 'x';
+    closeButton.setAttribute('aria-label', 'Close mode controls');
+
+    const reopenButton = document.createElement('button');
+    reopenButton.type = 'button';
+    reopenButton.className = 'version-toggle-reopen';
+    reopenButton.textContent = '.';
+    reopenButton.hidden = true;
+    reopenButton.setAttribute('aria-label', 'Open mode controls');
+
+    closeButton.addEventListener('click', () => {
+        toggleContainer.hidden = true;
+        reopenButton.hidden = false;
+    });
+
+    reopenButton.addEventListener('click', () => {
+        toggleContainer.hidden = false;
+        reopenButton.hidden = true;
+    });
+
+    toggleContainer.append(currentMode, closeButton);
+    document.body.append(toggleContainer, reopenButton);
+    return toggleContainer;
 }
 
 function setStarTotal(nextTotal) {
@@ -813,8 +867,16 @@ function createBlackHolePass() {
                 return mat2(c, -s, s, c);
             }
 
+            float sceneEdgeMask(vec2 uv) {
+                vec2 fade = max(vec2(2.0) / uResolution, vec2(0.0015));
+                vec2 lower = smoothstep(vec2(0.0), fade, uv);
+                vec2 upper = 1.0 - smoothstep(vec2(1.0) - fade, vec2(1.0), uv);
+                return lower.x * lower.y * upper.x * upper.y;
+            }
+
             vec4 sampleScene(vec2 uv) {
-                return texture2D(tScene, clamp(uv, vec2(0.001), vec2(0.999)));
+                vec2 safeUv = clamp(uv, vec2(0.001), vec2(0.999));
+                return texture2D(tScene, safeUv) * sceneEdgeMask(uv);
             }
 
             vec3 sampleRGBShift(vec2 uv, vec2 direction, float amount) {
@@ -1102,8 +1164,13 @@ function updatePointerAndCamera(delta, elapsedTime) {
         flightDistance += delta * config.flight.speed * flightVisualIntensity;
     }
 
-    const targetParallaxLock = Math.max(flightVisualIntensity, blackHoleState.active ? 1 : 0);
-    const lockResponse = targetParallaxLock > parallaxLock ? 7.5 : 3.5;
+    const blackHoleUnlockElapsed = blackHoleState.active
+        ? Math.max(0, performance.now() - blackHoleState.startTime - config.blackHole.growthDuration)
+        : config.blackHole.parallaxUnlockDuration;
+    const blackHoleUnlockProgress = smootherstep(0, config.blackHole.parallaxUnlockDuration, blackHoleUnlockElapsed);
+    const blackHoleParallaxLock = blackHoleState.active ? 1 - blackHoleUnlockProgress : 0;
+    const targetParallaxLock = Math.max(flightVisualIntensity, blackHoleParallaxLock);
+    const lockResponse = targetParallaxLock > parallaxLock ? 7.5 : 1.15;
     parallaxLock = THREE.MathUtils.damp(parallaxLock, targetParallaxLock, lockResponse, delta);
     pointerParallax.copy(pointerCurrent).multiplyScalar(1 - smootherstep(0, 1, parallaxLock));
 
