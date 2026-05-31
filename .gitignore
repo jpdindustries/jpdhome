@@ -1,5 +1,6 @@
 # Temporary files
 screenshots/
+.kilo/
 
 # Node modules (if any)
 node_modules/

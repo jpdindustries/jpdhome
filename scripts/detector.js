@@ -894,6 +894,8 @@ class VersionDetector {
     toggleContainer.style.fontSize = "12px";
     toggleContainer.style.color = "#FFF";
     toggleContainer.style.display = "flex";
+    toggleContainer.style.alignItems = "center";
+    toggleContainer.style.flexWrap = "wrap";
     toggleContainer.style.gap = "5px";
     toggleContainer.style.transition = "opacity 0.3s ease";
 
@@ -902,7 +904,21 @@ class VersionDetector {
     });
 
     toggleContainer.addEventListener("mouseleave", () => {
-      toggleContainer.style.opacity = "0.15";
+      if (!toggleContainer.contains(document.activeElement)) {
+        toggleContainer.style.opacity = "0.15";
+      }
+    });
+
+    toggleContainer.addEventListener("focusin", () => {
+      toggleContainer.style.opacity = "1.0";
+      toggleContainer.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+    });
+
+    toggleContainer.addEventListener("focusout", () => {
+      if (!toggleContainer.contains(document.activeElement)) {
+        toggleContainer.style.opacity = "0.15";
+        toggleContainer.style.backgroundColor = "transparent";
+      }
     });
 
     const createButton = (vName) => {
@@ -947,8 +963,54 @@ class VersionDetector {
     closeBtn.style.padding = "3px 5px";
     closeBtn.style.cursor = "pointer";
     closeBtn.style.marginLeft = "5px";
+
+    const reopenBtn = document.createElement("button");
+    reopenBtn.textContent = ".";
+    reopenBtn.setAttribute("aria-label", "Open mode controls");
+    reopenBtn.style.position = "fixed";
+    reopenBtn.style.bottom = "20px";
+    reopenBtn.style.right = "20px";
+    reopenBtn.style.zIndex = "1000";
+    reopenBtn.style.width = "14px";
+    reopenBtn.style.height = "14px";
+    reopenBtn.style.border = "1px solid rgba(255, 0, 0, 0.08)";
+    reopenBtn.style.borderRadius = "50%";
+    reopenBtn.style.background = "transparent";
+    reopenBtn.style.color = "rgba(255, 255, 255, 0.08)";
+    reopenBtn.style.cursor = "pointer";
+    reopenBtn.style.display = "none";
+    reopenBtn.style.padding = "0";
+    reopenBtn.style.font = "10px/1 monospace";
+    reopenBtn.style.transition = "border-color 0.2s ease, color 0.2s ease";
+
+    reopenBtn.addEventListener("mouseenter", () => {
+      reopenBtn.style.borderColor = "rgba(255, 0, 0, 0.55)";
+      reopenBtn.style.color = "rgba(255, 255, 255, 0.55)";
+    });
+
+    reopenBtn.addEventListener("mouseleave", () => {
+      reopenBtn.style.borderColor = "rgba(255, 0, 0, 0.08)";
+      reopenBtn.style.color = "rgba(255, 255, 255, 0.08)";
+    });
+
+    reopenBtn.addEventListener("focus", () => {
+      reopenBtn.style.borderColor = "rgba(255, 0, 0, 0.55)";
+      reopenBtn.style.color = "rgba(255, 255, 255, 0.55)";
+    });
+
+    reopenBtn.addEventListener("blur", () => {
+      reopenBtn.style.borderColor = "rgba(255, 0, 0, 0.08)";
+      reopenBtn.style.color = "rgba(255, 255, 255, 0.08)";
+    });
+
     closeBtn.onclick = () => {
       toggleContainer.style.display = "none";
+      reopenBtn.style.display = "block";
+    };
+
+    reopenBtn.onclick = () => {
+      toggleContainer.style.display = "flex";
+      reopenBtn.style.display = "none";
     };
 
     toggleContainer.appendChild(autoBtn);
@@ -959,17 +1021,20 @@ class VersionDetector {
     toggleContainer.appendChild(closeBtn);
 
     // Add hover effect for the container to become more visible
-    toggleContainer.style.transition = "background-color 0.3s";
+    toggleContainer.style.transition = "opacity 0.3s ease, background-color 0.3s ease";
 
     toggleContainer.addEventListener("mouseenter", () => {
       toggleContainer.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
     });
 
     toggleContainer.addEventListener("mouseleave", () => {
-      toggleContainer.style.backgroundColor = "transparent";
+      if (!toggleContainer.contains(document.activeElement)) {
+        toggleContainer.style.backgroundColor = "transparent";
+      }
     });
 
     document.body.appendChild(toggleContainer);
+    document.body.appendChild(reopenBtn);
   }
 
   /**
