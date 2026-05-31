@@ -1,0 +1,11 @@
+# jpd.industries
+
+> A space-themed placeholder for jpd.industries with interactive starfield visuals.
+
+jpd.industries is a small static placeholder site. The public homepage is the canonical page; direct visual variants exist for capability testing and are not canonical content pages.
+
+## Site
+
+- [Homepage](https://jpd.industries/): Canonical placeholder page with interactive starfield visuals.
+- [Privacy](https://jpd.industries/privacy.html): Privacy notice for the placeholder site.
+- [Source repository](https://github.com/jpdindustries/jpdhome): Public source and issue tracker.
