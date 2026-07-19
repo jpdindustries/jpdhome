@@ -183,6 +183,8 @@ export async function mount(context) {
         varying float vRandom;
         varying float vFlight;
         varying float vAngle;
+        varying float vPointSize;
+        varying float vNearness;
 
         void main() {
           float moved = position.z - uFarZ + uFlightDistance * uLayerSpeed;
@@ -190,12 +192,19 @@ export async function mount(context) {
           vec4 mvPosition = modelViewMatrix * vec4(position.xy, wrappedZ, 1.0);
           float perspective = 720.0 / max(180.0, -mvPosition.z);
           float nearness = smoothstep(0.18, 1.0, perspective);
-          gl_PointSize = clamp(size * perspective * mix(1.0, 2.7, uFlightIntensity * nearness), 0.65, 26.0);
+          float pointSize = clamp(
+            size * perspective * mix(1.0, 2.25, uFlightIntensity * nearness),
+            0.65,
+            24.0
+          );
+          gl_PointSize = pointSize;
           gl_Position = projectionMatrix * mvPosition;
           vColor = color;
           vRandom = random;
           vFlight = uFlightIntensity;
           vAngle = atan(mvPosition.y, mvPosition.x);
+          vPointSize = pointSize;
+          vNearness = nearness;
         }
       `,
       fragmentShader: `
@@ -205,24 +214,48 @@ export async function mount(context) {
         varying float vRandom;
         varying float vFlight;
         varying float vAngle;
+        varying float vPointSize;
+        varying float vNearness;
 
         mat2 rotate2d(float angle) {
           float sine = sin(angle);
           float cosine = cos(angle);
-          return mat2(cosine, -sine, sine, cosine);
+          return mat2(cosine, sine, -sine, cosine);
         }
 
         void main() {
           vec2 centered = gl_PointCoord - 0.5;
-          float distanceToCenter = length(centered);
-          float core = 1.0 - smoothstep(0.08, 0.5, distanceToCenter);
           vec2 radial = rotate2d(-vAngle) * centered;
-          float streak = (1.0 - smoothstep(0.02, 0.17, abs(radial.y)))
-            * (1.0 - smoothstep(0.05, 0.5, abs(radial.x))) * vFlight;
+          float pixel = 1.0 / max(vPointSize, 1.0);
+          float motion = clamp(vFlight * mix(0.2, 1.0, vNearness), 0.0, 1.0);
+
+          // Keep the luminous head compact while the point footprint grows to hold its trail.
+          float headOffset = 0.1 * motion;
+          vec2 head = radial - vec2(headOffset, 0.0);
+          float headDistance = abs(head.x) * 0.9 + abs(head.y) * 1.1;
+          float headRadius = clamp(pixel * mix(0.78, 1.04, vRandom), 0.032, 0.4);
+          float headEdge = max(pixel * 0.4, 0.012);
+          float core = 1.0 - smoothstep(headRadius, headRadius + headEdge, headDistance);
+
+          // Forward motion is radial, so the thin negative-x wake always points inward.
+          float trailWidth = max(pixel * 0.48, 0.012);
+          float trailFeather = max(pixel * 0.5, 0.014);
+          float trailLine = 1.0 - smoothstep(
+            trailWidth,
+            trailWidth + trailFeather,
+            abs(radial.y)
+          );
+          float trailFade = smoothstep(-0.48, headOffset - 0.03, radial.x);
+          float trailCutoff = 1.0 - smoothstep(
+            headOffset - 0.02,
+            headOffset + max(pixel, 0.03),
+            radial.x
+          );
+          float streak = trailLine * trailFade * trailCutoff * motion;
           float twinkle = 0.78
             + 0.15 * sin(uTime * (1.3 + vRandom * 2.2) + vRandom * 19.7)
             + 0.06 * sin(uTime * (3.4 + vRandom) + vRandom * 7.1);
-          float alpha = max(core * twinkle, streak * 0.7);
+          float alpha = max(core * twinkle, streak * 0.55);
           if (alpha < 0.005) discard;
           gl_FragColor = vec4(vColor, clamp(alpha, 0.0, 1.0));
         }
