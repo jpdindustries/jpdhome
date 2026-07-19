@@ -1,30 +1,50 @@
 # jpd.industries
 
+[![Pages](https://github.com/jpdindustries/jpdhome/actions/workflows/pages.yml/badge.svg)](https://github.com/jpdindustries/jpdhome/actions/workflows/pages.yml)
 [![Docker](https://github.com/jpdindustries/jpdhome/actions/workflows/docker.yml/badge.svg)](https://github.com/jpdindustries/jpdhome/actions/workflows/docker.yml)
 
-A space-themed website with interactive parallax effects and automatic capability-based version selection.
+A space-themed, WebGL-first landing page with a Canvas fallback and no runtime CDN dependencies.
 
 ![Demo](assets/demo.gif)
 
-## Versions
+## Display modes
 
-The site detects your device capabilities and automatically selects the optimal version:
-- **Base**: Canvas 2D implementation optimized for all devices
-- **WebGL**: High-performance Three.js implementation
-- **Retro & RGB**: Hidden retro-styled versions
+- **Auto** (no `v` query): attempts WebGL2 on every device and falls back to Base only after a hard failure.
+- **WebGL** (`?v=webgl`): interactive Three.js starfield, star-count controls, and the logo black-hole easter egg.
+- **Base** (`?v=base`): Canvas 2D starfield.
+- **Retro** (`?v=retro`): pixel-quantized Canvas presentation.
+- **RGB** (`?v=rgb`): RGB Canvas presentation with direction-aware rainbow trails.
 
-You can manually force a version via the URL parameter (e.g., `?v=webgl` or `?v=rgb`).
+Invalid `v` values normalize to Auto. Reduced-motion users receive an ambient scene without parallax, forward flight, flybys, or celestial events.
 
 ## Development
 
-**Run locally:**
-```bash
-python3 -m http.server 8000
-```
-Then visit `http://localhost:8000`.
+Node 24 is pinned in `.nvmrc`.
 
-**Run with Docker:**
 ```bash
-docker-compose up --build
+npm ci
+npm run dev
 ```
-Then visit `http://localhost:8080`.
+
+Build and test the production artifact:
+
+```bash
+npm run build
+npm run test:unit
+npx playwright install chromium firefox webkit
+npm run test:e2e
+```
+
+The Vite build uses a relative base, so the same `dist` directory works at `/` and `/jpdhome/`. Stable runtime diagnostics are published as `data-*` attributes on `<html>` and through `window.__JPD_DIAGNOSTICS__` for browser tests.
+
+## Docker
+
+```bash
+docker compose up --build
+```
+
+Visit `http://localhost:8080`. The multi-stage image builds the checked-out source with Node 24, then serves only `dist` from nginx.
+
+## Release checks
+
+GitHub Actions builds and tests pull requests, then uploads only `dist` and deploys Pages from `main`. Before a release, also smoke-test physical Safari on iOS 16/current, Android Chrome, and an integrated-GPU laptop; browser emulation does not validate physical mobile GPU behavior.

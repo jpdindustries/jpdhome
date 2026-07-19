@@ -1,0 +1,9 @@
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  base: './',
+  build: {
+    manifest: true,
+    target: 'es2020',
+  },
+});

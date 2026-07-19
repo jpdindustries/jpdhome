@@ -1,0 +1,10 @@
+.git
+.github
+node_modules
+dist
+playwright-report
+test-results
+screenshots
+assets/demo.gif
+tests
+*.log
