@@ -14,7 +14,10 @@ import {
 import { getObjectProfile } from '../../src/core/flight-profiles.js';
 import { buildModeUrl, parseRequestedMode } from '../../src/core/modes.js';
 import { createMotionConfig, getQualityTier } from '../../src/core/quality.js';
-import { calculateBlackHoleLayout } from '../../src/renderers/black-hole.js';
+import {
+  calculateBlackHoleEntry,
+  calculateBlackHoleLayout,
+} from '../../src/renderers/black-hole.js';
 import {
   STAR_MAX,
   STAR_MIN,
@@ -98,6 +101,8 @@ test('black-hole layout wraps the unchanged logo with a broad outer lens', () =>
     logoHeight: 307.2,
   });
   assert.ok(desktop.coreDiameterCss >= desktop.logoDiameterCss + 47);
+  assert.ok(desktop.startCoreDiameterCss > desktop.logoDiameterCss);
+  assert.ok(desktop.startCoreDiameterCss < desktop.coreDiameterCss);
   assert.ok(desktop.targetDiameterCss >= 460);
   assert.ok(desktop.lensDiameterCss >= 720);
   assert.ok(desktop.coreRadius <= desktop.targetRadius * 0.82);
@@ -119,8 +124,79 @@ test('black-hole layout wraps the unchanged logo with a broad outer lens', () =>
     logoHeight: 280,
   });
   assert.ok(phoneLandscape.coreDiameterCss >= 318.9);
+  assert.ok(phoneLandscape.startCoreDiameterCss > phoneLandscape.logoDiameterCss);
+  assert.ok(phoneLandscape.startCoreDiameterCss < phoneLandscape.coreDiameterCss);
   assert.ok(phoneLandscape.targetRadius > 0.49);
   assert.ok(phoneLandscape.coreRadius <= phoneLandscape.targetRadius * 0.82);
+});
+
+test('black-hole entry reveals core, lens, rim, and disk in deliberate stages', () => {
+  assert.deepEqual(calculateBlackHoleEntry(0), {
+    core: 0,
+    radius: 0,
+    lens: 0,
+    rim: 0,
+    disk: 0,
+    dim: 0,
+    gather: 0,
+  });
+
+  const opening = calculateBlackHoleEntry(0.05);
+  assert.ok(opening.core > 0.05 && opening.core < 0.07);
+  assert.ok(opening.radius > 0.01 && opening.radius < 0.02);
+  assert.ok(opening.lens < 0.001);
+  assert.ok(opening.rim < 0.001);
+  assert.equal(opening.disk, 0);
+  assert.equal(opening.dim, 0);
+  assert.equal(opening.gather, 0);
+
+  const forming = calculateBlackHoleEntry(0.2);
+  assert.ok(forming.core > 0.95 && forming.core < 0.98);
+  assert.ok(forming.radius > 0.45 && forming.radius < 0.46);
+  assert.ok(forming.lens > 0.08 && forming.lens < 0.09);
+  assert.ok(forming.rim > 0.35 && forming.rim < 0.36);
+  assert.ok(forming.disk > 0.05 && forming.disk < 0.06);
+  assert.ok(forming.dim > 0.06 && forming.dim < 0.08);
+  assert.ok(forming.gather < 0.001);
+
+  const established = calculateBlackHoleEntry(0.42);
+  assert.equal(established.core, 1);
+  assert.equal(established.radius, 1);
+  assert.equal(established.rim, 1);
+  assert.ok(established.lens > 0.52 && established.lens < 0.53);
+  assert.ok(established.disk > 0.7 && established.disk < 0.72);
+  assert.ok(established.dim > 0.58 && established.dim < 0.59);
+  assert.ok(established.gather > 0.17 && established.gather < 0.19);
+
+  assert.deepEqual(calculateBlackHoleEntry(0.95), {
+    core: 1,
+    radius: 1,
+    lens: 1,
+    rim: 1,
+    disk: 1,
+    dim: 1,
+    gather: 1,
+  });
+  assert.deepEqual(calculateBlackHoleEntry(0, true), {
+    core: 1,
+    radius: 1,
+    lens: 1,
+    rim: 1,
+    disk: 1,
+    dim: 1,
+    gather: 1,
+  });
+
+  const keys = ['core', 'radius', 'lens', 'rim', 'disk', 'dim', 'gather'];
+  let previous = calculateBlackHoleEntry(0);
+  for (let step = 1; step <= 1000; step += 1) {
+    const current = calculateBlackHoleEntry(step / 1000);
+    for (const key of keys) {
+      assert.ok(current[key] >= previous[key]);
+      assert.ok(current[key] >= 0 && current[key] <= 1);
+    }
+    previous = current;
+  }
 });
 
 test('star-count logic keeps 10k controls and the intentional 2.4m ceiling', () => {

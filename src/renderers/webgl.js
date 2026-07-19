@@ -432,14 +432,10 @@ export async function mount(context) {
     if (blackHole.active || disposed) return;
     try {
       blackHole.active = true;
-      blackHole.startTime = performance.now();
       blackHole.progress = context.motion.reducedMotion ? 1 : 0;
       document.documentElement.dataset.blackHole = 'active';
       pointerTarget.set(0, 0);
-      pointerCurrent.set(0, 0);
       pointerActiveUntil = 0;
-      interactionBlend = 0;
-      context.logo.style.transform = 'translate(-50%, -50%)';
       updateBlackHolePass(blackHole, elapsed, blackHole.progress);
       resizeBlackHole();
     } catch (error) {
@@ -454,14 +450,18 @@ export async function mount(context) {
     if (blackHole.clickTimes.length >= 3) activateBlackHole();
   }
 
-  function updateBlackHole(now) {
+  function updateBlackHole(delta) {
     if (!blackHole.active) return;
     const duration = Number.isFinite(hooks.blackHoleGrowthDuration)
       ? Math.max(0, hooks.blackHoleGrowthDuration)
       : context.motion.blackHoleGrowthDuration;
-    blackHole.progress = duration === 0
-      ? 1
-      : Math.min(1, (now - blackHole.startTime) / duration);
+    if (Number.isFinite(hooks.blackHoleProgressOverride)) {
+      blackHole.progress = THREE.MathUtils.clamp(hooks.blackHoleProgressOverride, 0, 1);
+    } else {
+      blackHole.progress = duration === 0
+        ? 1
+        : Math.min(1, blackHole.progress + (delta * 1000) / duration);
+    }
     updateBlackHolePass(blackHole, elapsed, blackHole.progress);
   }
 
@@ -512,13 +512,11 @@ export async function mount(context) {
       sprite.position.y = sprite.userData.base.y + pointerY * sprite.userData.parallax
         + (context.motion.reducedMotion ? 0 : Math.cos(elapsed * 0.035 + phase) * 12);
     });
-    if (!blackHole.active) {
-      const x = -pointerX * (context.quality.name === 'compact' ? 0.026 : 0.048);
-      const y = -pointerY * (context.quality.name === 'compact' ? 0.026 : 0.048);
-      context.logo.style.transform = `translate(calc(-50% + ${x.toFixed(2)}px), calc(-50% + ${y.toFixed(2)}px))`;
-    }
+    const logoX = -pointerX * (context.quality.name === 'compact' ? 0.026 : 0.048);
+    const logoY = -pointerY * (context.quality.name === 'compact' ? 0.026 : 0.048);
+    context.logo.style.transform = `translate(calc(-50% + ${logoX.toFixed(2)}px), calc(-50% + ${logoY.toFixed(2)}px))`;
     updateCelestialEvents(delta);
-    updateBlackHole(now);
+    updateBlackHole(delta);
   }
 
   function render() {
@@ -765,12 +763,20 @@ export async function mount(context) {
         interactionBlend,
         blackHoleActive: blackHole.active,
         blackHoleProgress: blackHole.progress,
+        blackHoleEntry: { ...blackHole.entry },
         blackHoleFlowTime: blackHole.flowTime,
         blackHoleCenter: { x: blackHoleCenter.x, y: blackHoleCenter.y },
         blackHoleTargetRadius: blackHole.targetRadius,
         blackHoleCoreRadius: blackHole.coreRadius,
+        blackHoleStartCoreRadius: blackHole.startCoreRadius,
         blackHoleLogoDiameterCss: blackHole.logoDiameterCss,
+        blackHoleStartCoreDiameterCss: blackHole.startCoreDiameterCss,
         blackHoleCoreDiameterCss: blackHole.coreDiameterCss,
+        blackHoleCurrentCoreDiameterCss: THREE.MathUtils.lerp(
+          blackHole.startCoreDiameterCss,
+          blackHole.coreDiameterCss,
+          blackHole.entry.radius,
+        ),
         blackHoleTargetDiameterCss: blackHole.targetDiameterCss,
         blackHoleLensDiameterCss: blackHole.lensDiameterCss,
         blackHoleSceneTargetSize: {

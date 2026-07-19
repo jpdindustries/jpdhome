@@ -121,13 +121,62 @@ test('the black hole stays centered without shrinking the logo at DPR 2', async 
   const page = await context.newPage();
   try {
     await page.addInitScript(() => {
-      window.__JPD_TEST_HOOKS__ = { blackHoleGrowthDuration: 250 };
+      window.__JPD_TEST_HOOKS__ = { blackHoleProgressOverride: 0 };
     });
     await page.goto('/?v=webgl');
     await waitForScene(page);
     const before = await page.locator('#logo-trigger').boundingBox();
     await page.evaluate(() => window.__JPD_DIAGNOSTICS__.activateBlackHole());
     await expect(page.locator('html')).toHaveAttribute('data-black-hole', 'active');
+    const opening = await page.evaluate(
+      () => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics(),
+    );
+    expect(opening.blackHoleProgress).toBe(0);
+    expect(opening.blackHoleEntry).toEqual({
+      core: 0,
+      radius: 0,
+      lens: 0,
+      rim: 0,
+      disk: 0,
+      dim: 0,
+      gather: 0,
+    });
+    expect(opening.blackHoleStartCoreDiameterCss).toBeGreaterThan(before.width + 13);
+    expect(opening.blackHoleStartCoreDiameterCss).toBeLessThan(opening.blackHoleCoreDiameterCss);
+    expect(opening.blackHoleCurrentCoreDiameterCss).toBeCloseTo(
+      opening.blackHoleStartCoreDiameterCss,
+      5,
+    );
+
+    await page.evaluate(() => {
+      window.__JPD_TEST_HOOKS__.blackHoleProgressOverride = 0.2;
+    });
+    await expect.poll(async () => {
+      const current = await page.evaluate(
+        () => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics(),
+      );
+      return current.blackHoleProgress;
+    }).toBe(0.2);
+    const forming = await page.evaluate(
+      () => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics(),
+    );
+    expect(forming.blackHoleEntry.core).toBeGreaterThan(0.95);
+    expect(forming.blackHoleEntry.radius).toBeGreaterThan(0.45);
+    expect(forming.blackHoleEntry.radius).toBeLessThan(0.46);
+    expect(forming.blackHoleEntry.lens).toBeLessThan(0.1);
+    expect(forming.blackHoleEntry.rim).toBeGreaterThan(0.35);
+    expect(forming.blackHoleEntry.rim).toBeLessThan(0.36);
+    expect(forming.blackHoleEntry.disk).toBeLessThan(0.06);
+    expect(forming.blackHoleCurrentCoreDiameterCss).toBeGreaterThan(
+      opening.blackHoleCurrentCoreDiameterCss,
+    );
+    expect(forming.blackHoleCurrentCoreDiameterCss).toBeLessThan(
+      opening.blackHoleCoreDiameterCss,
+    );
+
+    await page.evaluate(() => {
+      window.__JPD_TEST_HOOKS__.blackHoleProgressOverride = 1;
+    });
     await expect.poll(async () => {
       const current = await page.evaluate(
         () => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics(),
@@ -149,6 +198,19 @@ test('the black hole stays centered without shrinking the logo at DPR 2', async 
       diagnostics.blackHoleCenter.y - diagnostics.drawingBufferSize.height / 2,
     )).toBeLessThan(0.5);
     expect(diagnostics.blackHoleCoreDiameterCss).toBeGreaterThan(before.width + 40);
+    expect(diagnostics.blackHoleCurrentCoreDiameterCss).toBeCloseTo(
+      diagnostics.blackHoleCoreDiameterCss,
+      5,
+    );
+    expect(diagnostics.blackHoleEntry).toEqual({
+      core: 1,
+      radius: 1,
+      lens: 1,
+      rim: 1,
+      disk: 1,
+      dim: 1,
+      gather: 1,
+    });
     expect(diagnostics.blackHoleTargetDiameterCss).toBeGreaterThanOrEqual(460);
     expect(diagnostics.blackHoleLensDiameterCss).toBeGreaterThanOrEqual(720);
     expect(diagnostics.blackHoleSceneTargetSize).toEqual(diagnostics.drawingBufferSize);

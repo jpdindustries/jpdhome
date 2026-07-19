@@ -4,6 +4,34 @@ const BASE_TARGET_RADIUS = 0.32;
 const CORE_TO_TARGET_LIMIT = 0.82;
 const LENS_RADIUS_MULTIPLIER = 1.58;
 
+function smootherStep(value) {
+  const clamped = Math.min(1, Math.max(0, value));
+  return clamped * clamped * clamped * (
+    clamped * (clamped * 6 - 15) + 10
+  );
+}
+
+function stagedReveal(progress, start, end) {
+  return smootherStep((progress - start) / Math.max(end - start, Number.EPSILON));
+}
+
+export function calculateBlackHoleEntry(progress, reducedMotion = false) {
+  if (reducedMotion) {
+    return { core: 1, radius: 1, lens: 1, rim: 1, disk: 1, dim: 1, gather: 1 };
+  }
+
+  const clamped = Math.min(1, Math.max(0, Number(progress) || 0));
+  return {
+    core: stagedReveal(clamped, 0, 0.24),
+    radius: stagedReveal(clamped, 0, 0.42),
+    lens: stagedReveal(clamped, 0.02, 0.8),
+    rim: stagedReveal(clamped, 0.04, 0.42),
+    disk: stagedReveal(clamped, 0.1, 0.62),
+    dim: stagedReveal(clamped, 0.06, 0.72),
+    gather: stagedReveal(clamped, 0.18, 0.95),
+  };
+}
+
 export function calculateBlackHoleLayout({
   viewportWidth,
   viewportHeight,
@@ -14,6 +42,10 @@ export function calculateBlackHoleLayout({
   const logoDiameter = Math.max(0, logoWidth, logoHeight);
   const padding = Math.min(48, minDimension * 0.1);
   const desiredCoreDiameter = Math.max(logoDiameter + padding, minDimension * 0.34);
+  const startCoreDiameter = Math.min(
+    desiredCoreDiameter,
+    logoDiameter + Math.min(14, padding * 0.35),
+  );
   const fittedTargetRadius = desiredCoreDiameter
     / (2 * minDimension * CORE_TO_TARGET_LIMIT);
   const targetRadius = Math.max(BASE_TARGET_RADIUS, fittedTargetRadius);
@@ -25,7 +57,9 @@ export function calculateBlackHoleLayout({
   return {
     targetRadius,
     coreRadius,
+    startCoreRadius: startCoreDiameter / (2 * minDimension),
     logoDiameterCss: logoDiameter,
+    startCoreDiameterCss: startCoreDiameter,
     coreDiameterCss: coreRadius * minDimension * 2,
     targetDiameterCss: targetRadius * minDimension * 2,
     lensDiameterCss: targetRadius * LENS_RADIUS_MULTIPLIER * minDimension * 2,
@@ -51,6 +85,8 @@ function createDistortionMaterial() {
       uCenter: { value: new THREE.Vector2(0.5, 0.5) },
       uTargetRadius: { value: BASE_TARGET_RADIUS },
       uCoreRadius: { value: 0.24 },
+      uStartCoreRadius: { value: 0.2 },
+      uRadiusReveal: { value: 0 },
     },
     vertexShader: fullScreenVertexShader(),
     fragmentShader: `
@@ -60,6 +96,8 @@ function createDistortionMaterial() {
       uniform vec2 uCenter;
       uniform float uTargetRadius;
       uniform float uCoreRadius;
+      uniform float uStartCoreRadius;
+      uniform float uRadiusReveal;
       varying vec2 vUv;
 
       float smoother(float value) {
@@ -79,7 +117,10 @@ function createDistortionMaterial() {
         vec2 point = (vUv - centerUv) * uResolution / minDimension;
         float distanceToCenter = length(point);
         float progress = smoother(uProgress);
-        float coreRadius = max(uCoreRadius, pixel * 8.0);
+        float coreRadius = max(
+          mix(uStartCoreRadius, uCoreRadius, uRadiusReveal),
+          pixel * 8.0
+        );
         float activeRadius = mix(coreRadius * 1.1, uTargetRadius, progress);
         float field = 1.0 - smoothstep(
           coreRadius * 0.24,
@@ -121,7 +162,15 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
       uCenter: { value: new THREE.Vector2(0.5, 0.5) },
       uTargetRadius: { value: BASE_TARGET_RADIUS },
       uCoreRadius: { value: 0.24 },
+      uStartCoreRadius: { value: 0.2 },
       uReducedMotion: { value: reducedMotion ? 1 : 0 },
+      uCoreReveal: { value: reducedMotion ? 1 : 0 },
+      uRadiusReveal: { value: reducedMotion ? 1 : 0 },
+      uLensReveal: { value: reducedMotion ? 1 : 0 },
+      uRimReveal: { value: reducedMotion ? 1 : 0 },
+      uDiskReveal: { value: reducedMotion ? 1 : 0 },
+      uDimReveal: { value: reducedMotion ? 1 : 0 },
+      uGatherReveal: { value: reducedMotion ? 1 : 0 },
     },
     vertexShader: fullScreenVertexShader(),
     fragmentShader: `
@@ -134,7 +183,15 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
       uniform vec2 uCenter;
       uniform float uTargetRadius;
       uniform float uCoreRadius;
+      uniform float uStartCoreRadius;
       uniform float uReducedMotion;
+      uniform float uCoreReveal;
+      uniform float uRadiusReveal;
+      uniform float uLensReveal;
+      uniform float uRimReveal;
+      uniform float uDiskReveal;
+      uniform float uDimReveal;
+      uniform float uGatherReveal;
       varying vec2 vUv;
 
       float hash(vec2 point) {
@@ -220,17 +277,17 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
           : vec2(1.0, 0.0);
         vec2 tangent = vec2(-radial.y, radial.x);
         float progress = smoother(uProgress);
-        float reveal = uReducedMotion > 0.5
-          ? 1.0
-          : smoothstep(0.0, 0.055, uProgress);
         float motionScale = 1.0 - uReducedMotion;
         float flowTime = uTime * motionScale;
-        float coreRadius = max(uCoreRadius, pixel * 8.0);
+        float coreRadius = max(
+          mix(uStartCoreRadius, uCoreRadius, uRadiusReveal),
+          pixel * 8.0
+        );
         float activeRadius = mix(coreRadius * 1.1, uTargetRadius, progress);
         float edge = max(pixel * 1.7, coreRadius * 0.0075);
 
         if (distanceToCenter > activeRadius * 1.6 + pixel * 4.0) {
-          gl_FragColor = vec4(vec3(0.0), progress * 0.2);
+          gl_FragColor = vec4(vec3(0.0), uDimReveal * 0.2);
           return;
         }
 
@@ -243,7 +300,7 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
           coreRadius,
           distanceToCenter
         );
-        float broadLens = max(distortion, interiorMask * 0.82);
+        float broadLens = max(distortion, interiorMask * 0.82) * uLensReveal;
         float lensNoise = fbm(
           centered * 6.4 + vec2(flowTime * 0.18, -flowTime * 0.11)
         );
@@ -293,7 +350,7 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
         ) * progress;
         float chromaAmount = (
           photonRing * 0.0042 + photonGlow * 0.0014
-        ) * motionScale;
+        ) * motionScale * uRimReveal;
         vec2 chromaOffset = radial * chromaAmount * minDimension / uResolution;
         vec4 sceneMid = sampleScene(warpedUv);
         vec3 sceneRgb = mix(
@@ -432,17 +489,30 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
         );
         vec3 color = sceneRgb;
         color = mix(color, coreSample, coreWindow * 0.18);
-        color *= 1.0 - coreWindow * 0.82;
-        color += cloud * diskColor * 0.58;
-        color += flowHighlight * vec3(1.0, 0.76, 0.34) * 0.34;
-        color += specks * vec3(1.0, 0.68, 0.3) * 0.55;
+        color *= 1.0 - coreWindow * 0.82 * uCoreReveal;
+        color += cloud * diskColor * 0.58 * uDiskReveal;
+        color += flowHighlight
+          * vec3(1.0, 0.76, 0.34)
+          * 0.34
+          * uDiskReveal;
+        color += specks * vec3(1.0, 0.68, 0.3) * 0.55 * uDiskReveal;
         color += vec3(1.0, 0.88, 0.58)
           * max(photonRing, photonFromPass * 0.62)
           * 1.12
-          * rimFlow;
-        color += vec3(1.0, 0.7, 0.36) * photonGlow * 0.42;
-        color += vec3(0.42, 0.2, 0.62) * lensHalo * 0.08;
-        color += vec3(0.72, 0.4, 0.2) * outerGather * 0.035;
+          * rimFlow
+          * uRimReveal;
+        color += vec3(1.0, 0.7, 0.36)
+          * photonGlow
+          * 0.42
+          * uRimReveal;
+        color += vec3(0.42, 0.2, 0.62)
+          * lensHalo
+          * 0.08
+          * uLensReveal;
+        color += vec3(0.72, 0.4, 0.2)
+          * outerGather
+          * 0.035
+          * uGatherReveal;
 
         float apertureShadow = softBand(
           distanceToCenter,
@@ -458,26 +528,26 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
             activeRadius * 1.58,
             distanceToCenter
           )
-        ) * reveal;
+        ) * uLensReveal;
         float lightMask = clamp(
-          max(photonRing, photonFromPass * 0.62)
-            + photonGlow * 0.42
-            + cloud * 0.82
-            + specks * 0.8
-            + lensHalo * 0.38
-            + outerGather * 0.12,
+          max(photonRing, photonFromPass * 0.62) * uRimReveal
+            + photonGlow * 0.42 * uRimReveal
+            + cloud * 0.82 * uDiskReveal
+            + specks * 0.8 * uDiskReveal
+            + lensHalo * 0.38 * uLensReveal
+            + outerGather * 0.12 * uGatherReveal,
           0.0,
           1.0
-        ) * reveal;
-        float coreMask = coreWindow * reveal;
+        );
+        float coreMask = coreWindow * uCoreReveal;
         float effectAlpha = clamp(
           max(lensMask * 0.6, coreMask * 0.995)
             + lightMask * 0.38
-            + broadLens * 0.18 * reveal,
+            + broadLens * 0.18 * uLensReveal,
           0.0,
           0.995
         );
-        float dimAlpha = progress * 0.2;
+        float dimAlpha = uDimReveal * 0.2;
         float outputAlpha = clamp(
           dimAlpha + effectAlpha * (1.0 - dimAlpha),
           0.0,
@@ -545,14 +615,17 @@ export function createBlackHolePass(reducedMotion) {
     distortionMesh,
     sceneTarget,
     distortionTarget,
+    reducedMotion: Boolean(reducedMotion),
+    entry: calculateBlackHoleEntry(0, reducedMotion),
     active: false,
-    startTime: 0,
     clickTimes: [],
     progress: 0,
     flowTime: 0,
     targetRadius: BASE_TARGET_RADIUS,
     coreRadius: 0.24,
+    startCoreRadius: 0.2,
     logoDiameterCss: 0,
+    startCoreDiameterCss: 0,
     coreDiameterCss: 0,
     targetDiameterCss: 0,
     lensDiameterCss: 0,
@@ -573,6 +646,7 @@ export function fitBlackHoleToLogo(pass, logo) {
   for (const shader of [pass.material, pass.distortionMaterial]) {
     shader.uniforms.uTargetRadius.value = layout.targetRadius;
     shader.uniforms.uCoreRadius.value = layout.coreRadius;
+    shader.uniforms.uStartCoreRadius.value = layout.startCoreRadius;
   }
   return layout;
 }
@@ -594,11 +668,21 @@ export function resizeBlackHolePass(pass, renderer) {
 }
 
 export function updateBlackHolePass(pass, elapsed, progress) {
+  const entry = calculateBlackHoleEntry(progress, pass.reducedMotion);
   pass.progress = progress;
   pass.flowTime = elapsed;
+  pass.entry = entry;
   pass.material.uniforms.uTime.value = elapsed;
   pass.material.uniforms.uProgress.value = progress;
+  pass.material.uniforms.uCoreReveal.value = entry.core;
+  pass.material.uniforms.uRadiusReveal.value = entry.radius;
+  pass.material.uniforms.uLensReveal.value = entry.lens;
+  pass.material.uniforms.uRimReveal.value = entry.rim;
+  pass.material.uniforms.uDiskReveal.value = entry.disk;
+  pass.material.uniforms.uDimReveal.value = entry.dim;
+  pass.material.uniforms.uGatherReveal.value = entry.gather;
   pass.distortionMaterial.uniforms.uProgress.value = progress;
+  pass.distortionMaterial.uniforms.uRadiusReveal.value = entry.radius;
 }
 
 export function renderBlackHolePass(pass, renderer, scene, camera) {
