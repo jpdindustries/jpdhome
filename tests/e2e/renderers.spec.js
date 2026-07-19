@@ -68,6 +68,20 @@ test('a restored WebGL context reports ready only after a restored frame', async
   await expect(page.locator('html')).toHaveAttribute('data-renderer', 'webgl');
 });
 
+test('a failed restored frame falls back instead of reporting ready', async ({ page }, testInfo) => {
+  test.skip(!isChromiumDesktop(testInfo.project.name));
+  await page.addInitScript(() => {
+    window.__JPD_TEST_HOOKS__ = { webglRestoreFrameFailure: true };
+  });
+  await page.goto('/?v=webgl');
+  await waitForScene(page);
+  await page.evaluate(() => window.__JPD_DIAGNOSTICS__.simulateContextLoss({ restoreAfter: 80 }));
+  await waitForScene(page, 'recovering');
+  await waitForScene(page, 'fallback');
+  await expect(page.locator('html')).toHaveAttribute('data-renderer', 'base');
+  await expect(page.locator('html')).toHaveAttribute('data-fallback-reason', 'context-lost');
+});
+
 test('a second context loss within 30 seconds falls back immediately', async ({ page }, testInfo) => {
   test.skip(!isChromiumDesktop(testInfo.project.name));
   await page.goto('/?v=webgl');

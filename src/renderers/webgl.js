@@ -1,5 +1,13 @@
 import * as THREE from 'three';
 import { distributeStarCount, clampStarCount } from '../core/stars.js';
+import {
+  createBlackHolePass as createBlackHoleCompositor,
+  disposeBlackHolePass,
+  fitBlackHoleToLogo,
+  renderBlackHolePass,
+  resizeBlackHolePass,
+  updateBlackHolePass,
+} from './black-hole.js';
 
 const STAR_LAYER_SHAPES = Object.freeze([
   { size: 1.15, farZ: -3800, nearZ: 560, spread: 3000, parallax: 0.04, speed: 0.62 },
@@ -62,13 +70,14 @@ export async function mount(context) {
   const celestialEvents = [];
   const pointerTarget = new THREE.Vector2();
   const pointerCurrent = new THREE.Vector2();
-  const blackHole = createBlackHolePass(context.motion.reducedMotion);
+  const blackHole = createBlackHoleCompositor(context.motion.reducedMotion);
   const baseWeights = [...context.quality.starCounts];
   let currentStarCount = baseWeights.reduce((sum, count) => sum + count, 0);
   let renderer;
   let celestialCanvas;
   let celestialContext;
   let rafId = 0;
+  let restoreRafId = 0;
   let disposed = false;
   let recovering = false;
   let fatalReported = false;
@@ -111,6 +120,7 @@ export async function mount(context) {
     }
 
     renderer.compile(scene, camera);
+    renderer.compile(blackHole.distortionScene, blackHole.camera);
     renderer.compile(blackHole.scene, blackHole.camera);
     await renderFirstFrame();
   } catch (error) {
@@ -413,93 +423,28 @@ export async function mount(context) {
     celestialContext.restore();
   }
 
-  function createBlackHolePass(reducedMotion) {
-    const passScene = new THREE.Scene();
-    const passCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    const material = new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uProgress: { value: 0 },
-        uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
-        uCenter: { value: new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2) },
-        uReducedMotion: { value: reducedMotion ? 1 : 0 },
-      },
-      vertexShader: `
-        void main() {
-          gl_Position = vec4(position.xy, 0.0, 1.0);
-        }
-      `,
-      fragmentShader: `
-        precision highp float;
-        uniform float uTime;
-        uniform float uProgress;
-        uniform vec2 uResolution;
-        uniform vec2 uCenter;
-        uniform float uReducedMotion;
-
-        void main() {
-          vec2 point = (gl_FragCoord.xy - uCenter) / max(uResolution.y, 1.0);
-          float distanceToCenter = length(point);
-          float progress = uProgress * uProgress * (3.0 - 2.0 * uProgress);
-          float radius = mix(0.002, 0.275, progress);
-          float coreRadius = radius * 0.44;
-          float angle = atan(point.y, point.x);
-          float motion = mix(uTime * 0.7, 0.0, uReducedMotion);
-          float noise = sin(angle * 12.0 - motion * 2.2) * 0.5 + sin(angle * 27.0 + motion) * 0.25;
-          float core = 1.0 - smoothstep(coreRadius - 0.008, coreRadius + 0.008, distanceToCenter);
-          float ringCenter = coreRadius * 1.26 + noise * radius * 0.012;
-          float ring = 1.0 - smoothstep(0.0, radius * 0.075, abs(distanceToCenter - ringCenter));
-          float diskY = abs(point.y + point.x * 0.12) * 2.9;
-          float diskRadius = length(vec2(point.x, diskY));
-          float disk = smoothstep(coreRadius * 0.96, coreRadius * 1.08, diskRadius)
-            * (1.0 - smoothstep(radius * 0.98, radius * 1.16, diskRadius));
-          float halo = (1.0 - smoothstep(radius * 0.7, radius * 1.38, distanceToCenter)) * 0.14;
-          vec3 ringColor = mix(vec3(1.0, 0.3, 0.08), vec3(1.0, 0.82, 0.45), ring);
-          vec3 color = ringColor * (ring * 1.35 + disk * 0.34) + vec3(0.4, 0.18, 0.55) * halo;
-          color *= 1.0 - core;
-          float alpha = clamp(core * 0.98 + ring * 0.9 + disk * 0.46 + halo, 0.0, 0.98) * progress;
-          gl_FragColor = vec4(color, alpha);
-        }
-      `,
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
-      blending: THREE.NormalBlending,
-    });
-    material.toneMapped = false;
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
-    passScene.add(mesh);
-    return {
-      scene: passScene,
-      camera: passCamera,
-      material,
-      mesh,
-      active: false,
-      startTime: 0,
-      clickTimes: [],
-      progress: 0,
-    };
-  }
-
   function resizeBlackHole() {
-    const drawingBufferSize = renderer.getDrawingBufferSize(new THREE.Vector2());
-    blackHole.material.uniforms.uResolution.value.copy(drawingBufferSize);
-    blackHole.material.uniforms.uCenter.value.copy(drawingBufferSize).multiplyScalar(0.5);
+    if (blackHole.active) fitBlackHoleToLogo(blackHole, context.logo);
+    resizeBlackHolePass(blackHole, renderer);
   }
 
   function activateBlackHole() {
-    if (blackHole.active) return;
-    blackHole.active = true;
-    blackHole.startTime = performance.now();
-    blackHole.progress = context.motion.reducedMotion ? 1 : 0;
-    document.documentElement.dataset.blackHole = 'active';
-    pointerTarget.set(0, 0);
-    pointerCurrent.set(0, 0);
-    pointerActiveUntil = 0;
-    interactionBlend = 0;
-    context.logo.style.transform = 'translate(-50%, -50%)';
-    blackHole.material.uniforms.uProgress.value = blackHole.progress;
-    resizeBlackHole();
+    if (blackHole.active || disposed) return;
+    try {
+      blackHole.active = true;
+      blackHole.startTime = performance.now();
+      blackHole.progress = context.motion.reducedMotion ? 1 : 0;
+      document.documentElement.dataset.blackHole = 'active';
+      pointerTarget.set(0, 0);
+      pointerCurrent.set(0, 0);
+      pointerActiveUntil = 0;
+      interactionBlend = 0;
+      context.logo.style.transform = 'translate(-50%, -50%)';
+      updateBlackHolePass(blackHole, elapsed, blackHole.progress);
+      resizeBlackHole();
+    } catch (error) {
+      reportFatal('init-failed', error);
+    }
   }
 
   function onLogoClick() {
@@ -511,12 +456,13 @@ export async function mount(context) {
 
   function updateBlackHole(now) {
     if (!blackHole.active) return;
-    const duration = context.motion.blackHoleGrowthDuration;
+    const duration = Number.isFinite(hooks.blackHoleGrowthDuration)
+      ? Math.max(0, hooks.blackHoleGrowthDuration)
+      : context.motion.blackHoleGrowthDuration;
     blackHole.progress = duration === 0
       ? 1
       : Math.min(1, (now - blackHole.startTime) / duration);
-    blackHole.material.uniforms.uProgress.value = blackHole.progress;
-    blackHole.material.uniforms.uTime.value = elapsed;
+    updateBlackHolePass(blackHole, elapsed, blackHole.progress);
   }
 
   function updateScene(delta, now) {
@@ -577,12 +523,11 @@ export async function mount(context) {
 
   function render() {
     renderer.autoClear = true;
-    renderer.render(scene, camera);
     if (blackHole.active) {
-      renderer.autoClear = false;
-      renderer.clearDepth();
-      renderer.render(blackHole.scene, blackHole.camera);
-      renderer.autoClear = true;
+      renderBlackHolePass(blackHole, renderer, scene, camera);
+    } else {
+      renderer.setRenderTarget(null);
+      renderer.render(scene, camera);
     }
   }
 
@@ -593,8 +538,7 @@ export async function mount(context) {
           updateScene(0, now);
           render();
           if (hooks.webglFirstFrameFailure) throw new Error('Forced first-frame failure');
-          const errorCode = gl.getError();
-          if (errorCode !== gl.NO_ERROR) throw new Error(`WebGL error after first frame: ${errorCode}`);
+          assertSuccessfulFrame('first');
           resolve();
         } catch (error) {
           reject(error);
@@ -603,8 +547,21 @@ export async function mount(context) {
     });
   }
 
+  function assertSuccessfulFrame(stage) {
+    const errorCode = gl.getError();
+    if (errorCode !== gl.NO_ERROR) {
+      throw new Error(`WebGL error after ${stage} frame: ${errorCode}`);
+    }
+  }
+
+  function clearPendingWebGLErrors() {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      if (gl.getError() === gl.NO_ERROR) return;
+    }
+  }
+
   function animate(now) {
-    if (disposed || recovering || document.hidden) {
+    if (disposed || fatalReported || recovering || document.hidden) {
       rafId = 0;
       return;
     }
@@ -620,7 +577,7 @@ export async function mount(context) {
   }
 
   function monitorFrameRate(now) {
-    if (qualityReduced || recovering) return;
+    if (recovering) return;
     framesForQuality += 1;
     const windowDuration = now - qualityWindowStarted;
     if (windowDuration < 3000) return;
@@ -629,18 +586,26 @@ export async function mount(context) {
       qualityReduced = true;
       renderer.setPixelRatio(Math.max(1, renderer.getPixelRatio() * 0.75));
       onResize();
-    } else {
-      framesForQuality = 0;
-      qualityWindowStarted = now;
     }
+    resetQualityWindow(now);
+  }
+
+  function resetQualityWindow(now = performance.now()) {
+    framesForQuality = 0;
+    qualityWindowStarted = now;
   }
 
   function onResize() {
-    camera.aspect = window.innerWidth / Math.max(window.innerHeight, 1);
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight, false);
-    resizeCelestialOverlay();
-    resizeBlackHole();
+    if (disposed || fatalReported || recovering) return;
+    try {
+      camera.aspect = window.innerWidth / Math.max(window.innerHeight, 1);
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight, false);
+      resizeCelestialOverlay();
+      resizeBlackHole();
+    } catch (error) {
+      reportFatal('init-failed', error);
+    }
   }
 
   function onPointerMove(event) {
@@ -663,6 +628,7 @@ export async function mount(context) {
       cancelAnimationFrame(rafId);
       rafId = 0;
     } else if (!disposed && !recovering && !rafId) {
+      resetQualityWindow();
       clock.getDelta();
       rafId = requestAnimationFrame(animate);
     }
@@ -676,6 +642,9 @@ export async function mount(context) {
     lastContextLossAt = now;
     cancelAnimationFrame(rafId);
     rafId = 0;
+    cancelAnimationFrame(restoreRafId);
+    restoreRafId = 0;
+    resetQualityWindow(now);
     if (repeated) {
       reportFatal('context-lost', new Error('WebGL context was lost twice within 30 seconds'));
       return;
@@ -689,16 +658,23 @@ export async function mount(context) {
 
   function onContextRestored() {
     if (!recovering || disposed || fatalReported) return;
-    requestAnimationFrame(() => {
+    cancelAnimationFrame(restoreRafId);
+    restoreRafId = requestAnimationFrame(() => {
+      restoreRafId = 0;
+      if (!recovering || disposed || fatalReported) return;
       try {
         renderer.resetState();
+        clearPendingWebGLErrors();
         renderer.setSize(window.innerWidth, window.innerHeight, false);
         resizeBlackHole();
         render();
+        if (hooks.webglRestoreFrameFailure) throw new Error('Forced restored-frame failure');
+        assertSuccessfulFrame('restored');
         window.clearTimeout(restoreTimeout);
         restoreTimeout = 0;
         recovering = false;
         context.onRecovered?.();
+        resetQualityWindow();
         clock.getDelta();
         if (!document.hidden) rafId = requestAnimationFrame(animate);
       } catch (error) {
@@ -713,6 +689,8 @@ export async function mount(context) {
     recovering = false;
     cancelAnimationFrame(rafId);
     rafId = 0;
+    cancelAnimationFrame(restoreRafId);
+    restoreRafId = 0;
     window.clearTimeout(restoreTimeout);
     context.onFatal?.(reason, error);
   }
@@ -748,6 +726,7 @@ export async function mount(context) {
   function cleanup() {
     disposed = true;
     cancelAnimationFrame(rafId);
+    cancelAnimationFrame(restoreRafId);
     window.clearTimeout(restoreTimeout);
     window.clearTimeout(simulatedRestoreTimeout);
     abortController.abort();
@@ -758,8 +737,7 @@ export async function mount(context) {
       sprite.material.map?.dispose();
       sprite.material.dispose();
     }
-    blackHole.mesh.geometry.dispose();
-    blackHole.material.dispose();
+    disposeBlackHolePass(blackHole);
     renderer?.dispose();
     celestialCanvas?.remove();
     canvas.remove();
@@ -787,7 +765,22 @@ export async function mount(context) {
         interactionBlend,
         blackHoleActive: blackHole.active,
         blackHoleProgress: blackHole.progress,
+        blackHoleFlowTime: blackHole.flowTime,
         blackHoleCenter: { x: blackHoleCenter.x, y: blackHoleCenter.y },
+        blackHoleTargetRadius: blackHole.targetRadius,
+        blackHoleCoreRadius: blackHole.coreRadius,
+        blackHoleLogoDiameterCss: blackHole.logoDiameterCss,
+        blackHoleCoreDiameterCss: blackHole.coreDiameterCss,
+        blackHoleTargetDiameterCss: blackHole.targetDiameterCss,
+        blackHoleLensDiameterCss: blackHole.lensDiameterCss,
+        blackHoleSceneTargetSize: {
+          width: blackHole.sceneTarget.width,
+          height: blackHole.sceneTarget.height,
+        },
+        blackHoleDistortionTargetSize: {
+          width: blackHole.distortionTarget.width,
+          height: blackHole.distortionTarget.height,
+        },
         drawingBufferSize: { width: drawingBufferSize.x, height: drawingBufferSize.y },
         nebulaMaxOpacity: Math.max(0, ...nebulaSprites.map((sprite) => sprite.material.opacity)),
         nebulaUsesNormalBlending: nebulaSprites.every(

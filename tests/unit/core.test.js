@@ -14,6 +14,7 @@ import {
 import { getObjectProfile } from '../../src/core/flight-profiles.js';
 import { buildModeUrl, parseRequestedMode } from '../../src/core/modes.js';
 import { createMotionConfig, getQualityTier } from '../../src/core/quality.js';
+import { calculateBlackHoleLayout } from '../../src/renderers/black-hole.js';
 import {
   STAR_MAX,
   STAR_MIN,
@@ -87,6 +88,39 @@ test('reduced motion is ambient-only and quality tiers keep DPR limits', () => {
   assert.equal(getQualityTier({ width: 1600, devicePixelRatio: 3 }).name, 'desktop');
   assert.equal(getQualityTier({ width: 1600, devicePixelRatio: 3 }).pixelRatio, 2);
   assert.equal(getQualityTier({ width: 1600, coarsePointer: true }).name, 'compact');
+});
+
+test('black-hole layout wraps the unchanged logo with a broad outer lens', () => {
+  const desktop = calculateBlackHoleLayout({
+    viewportWidth: 1280,
+    viewportHeight: 720,
+    logoWidth: 307.2,
+    logoHeight: 307.2,
+  });
+  assert.ok(desktop.coreDiameterCss >= desktop.logoDiameterCss + 47);
+  assert.ok(desktop.targetDiameterCss >= 460);
+  assert.ok(desktop.lensDiameterCss >= 720);
+  assert.ok(desktop.coreRadius <= desktop.targetRadius * 0.82);
+
+  const phone = calculateBlackHoleLayout({
+    viewportWidth: 390,
+    viewportHeight: 844,
+    logoWidth: 203,
+    logoHeight: 203,
+  });
+  assert.ok(phone.coreDiameterCss > phone.logoDiameterCss);
+  assert.ok(phone.targetRadius > desktop.targetRadius);
+  assert.ok(phone.coreRadius <= phone.targetRadius * 0.82);
+
+  const phoneLandscape = calculateBlackHoleLayout({
+    viewportWidth: 844,
+    viewportHeight: 390,
+    logoWidth: 280,
+    logoHeight: 280,
+  });
+  assert.ok(phoneLandscape.coreDiameterCss >= 318.9);
+  assert.ok(phoneLandscape.targetRadius > 0.49);
+  assert.ok(phoneLandscape.coreRadius <= phoneLandscape.targetRadius * 0.82);
 });
 
 test('star-count logic keeps 10k controls and the intentional 2.4m ceiling', () => {
