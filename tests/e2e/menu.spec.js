@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { isChromiumDesktop, waitForScene } from './helpers.js';
 
-test('fine-pointer controls are hidden at rest and support hover, focus, Escape, and outside click', async ({ page }, testInfo) => {
+test('the low-opacity fine-pointer button opens controls by hover or focus', async ({ page }, testInfo) => {
   test.skip(!isChromiumDesktop(testInfo.project.name));
   await page.goto('/?v=base');
   await waitForScene(page);
@@ -11,6 +11,8 @@ test('fine-pointer controls are hidden at rest and support hover, focus, Escape,
   const panel = page.locator('.mode-menu-panel');
   await expect(root).toHaveAttribute('data-open', 'false');
   await expect(panel).toHaveAttribute('aria-hidden', 'true');
+  await expect(trigger).toHaveCSS('opacity', '0.18');
+  await expect(page.locator('.mode-menu-dot')).toHaveCSS('opacity', '1');
 
   await trigger.focus();
   await expect(root).toHaveAttribute('data-open', 'true');
@@ -34,7 +36,7 @@ test('fine-pointer controls are hidden at rest and support hover, focus, Escape,
   await expect(root).toHaveAttribute('data-open', 'false');
 });
 
-test('the coarse-pointer hotspot is a 44px tap target with a visible dot', async ({ page }, testInfo) => {
+test('the coarse-pointer opener is a 44px low-opacity tap target', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'pixel-touch');
   await page.goto('/?v=base');
   await waitForScene(page);
@@ -42,7 +44,8 @@ test('the coarse-pointer hotspot is a 44px tap target with a visible dot', async
   const box = await trigger.boundingBox();
   expect(box.width).toBeGreaterThanOrEqual(44);
   expect(box.height).toBeGreaterThanOrEqual(44);
-  await expect(page.locator('.mode-menu-dot')).not.toHaveCSS('opacity', '0');
+  await expect(trigger).toHaveCSS('opacity', '0.3');
+  await expect(page.locator('.mode-menu-dot')).toHaveCSS('opacity', '1');
   await trigger.tap();
   await expect(page.locator('.mode-control')).toHaveAttribute('data-open', 'true');
   await page.locator('#logo-trigger').tap();

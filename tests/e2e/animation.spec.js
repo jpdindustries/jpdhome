@@ -69,6 +69,81 @@ test('Canvas resize and visibility handlers pause and resume one flight loop', a
   await expect(page.locator('.scene-canvas')).toHaveCount(2);
 });
 
+test('WebGL starts idle flight immediately and eases into pointer parallax', async ({ page }, testInfo) => {
+  test.skip(!isChromiumDesktop(testInfo.project.name));
+  await page.goto('/?v=webgl');
+  await waitForScene(page);
+
+  const initial = await page.evaluate(() => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics());
+  expect(initial.flightIntensity).toBeGreaterThan(0.75);
+  expect(initial.interactionBlend).toBe(0);
+  expect(initial.nebulaMaxOpacity).toBeLessThanOrEqual(0.32);
+  expect(initial.nebulaUsesNormalBlending).toBe(true);
+
+  await expect.poll(async () => {
+    const diagnostics = await page.evaluate(() => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics());
+    return diagnostics.flightDistance;
+  }).toBeGreaterThan(initial.flightDistance + 5);
+
+  await page.mouse.move(1120, 120);
+  await page.waitForTimeout(80);
+  const entering = await page.evaluate(() => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics());
+  expect(entering.interactionBlend).toBeGreaterThan(0);
+  expect(entering.interactionBlend).toBeLessThan(0.65);
+  expect(Math.abs(entering.flightIntensity - initial.flightIntensity)).toBeLessThan(0.16);
+
+  await expect.poll(async () => {
+    const diagnostics = await page.evaluate(() => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics());
+    return diagnostics.interactionBlend;
+  }).toBeGreaterThan(0.55);
+  const activeBlend = await page.evaluate(() => (
+    window.__JPD_DIAGNOSTICS__.getRendererDiagnostics().interactionBlend
+  ));
+  await expect.poll(async () => {
+    const diagnostics = await page.evaluate(() => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics());
+    return diagnostics.flightIntensity;
+  }).toBeLessThan(0.7);
+
+  await expect.poll(async () => {
+    const diagnostics = await page.evaluate(() => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics());
+    return diagnostics.interactionBlend;
+  }, { timeout: 5_000 }).toBeLessThan(activeBlend);
+});
+
+test('the black hole stays centered without shrinking the logo at DPR 2', async ({ browser }, testInfo) => {
+  test.skip(!isChromiumDesktop(testInfo.project.name));
+  const context = await browser.newContext({
+    baseURL: 'http://127.0.0.1:4173',
+    colorScheme: 'dark',
+    deviceScaleFactor: 2,
+    viewport: { width: 1280, height: 720 },
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto('/?v=webgl');
+    await waitForScene(page);
+    const before = await page.locator('#logo-trigger').boundingBox();
+    await page.evaluate(() => window.__JPD_DIAGNOSTICS__.activateBlackHole());
+    await expect(page.locator('html')).toHaveAttribute('data-black-hole', 'active');
+    const after = await page.locator('#logo-trigger').boundingBox();
+    const diagnostics = await page.evaluate(() => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics());
+
+    expect(await page.evaluate(() => devicePixelRatio)).toBe(2);
+    expect(Math.abs(after.width - before.width)).toBeLessThan(0.5);
+    expect(Math.abs(after.height - before.height)).toBeLessThan(0.5);
+    expect(Math.abs(after.x + after.width / 2 - 640)).toBeLessThan(0.5);
+    expect(Math.abs(after.y + after.height / 2 - 360)).toBeLessThan(0.5);
+    expect(Math.abs(
+      diagnostics.blackHoleCenter.x - diagnostics.drawingBufferSize.width / 2,
+    )).toBeLessThan(0.5);
+    expect(Math.abs(
+      diagnostics.blackHoleCenter.y - diagnostics.drawingBufferSize.height / 2,
+    )).toBeLessThan(0.5);
+  } finally {
+    await context.close();
+  }
+});
+
 test('reduced motion stays ambient-only', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'reduced-motion');
   await page.emulateMedia({ reducedMotion: 'reduce' });

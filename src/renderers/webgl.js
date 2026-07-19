@@ -7,16 +7,14 @@ const STAR_LAYER_SHAPES = Object.freeze([
   { size: 2.25, farZ: -2150, nearZ: 780, spread: 2350, parallax: 0.16, speed: 1.22 },
 ]);
 
+const IDLE_FLIGHT_INTENSITY = 0.82;
+const POINTER_FLIGHT_INTENSITY = 0.26;
+const POINTER_ACTIVITY_HOLD_MS = 1100;
+
 function webglError(reason, message, cause) {
   const error = new Error(message, cause ? { cause } : undefined);
   error.fallbackReason = reason;
   return error;
-}
-
-function smoothstep(min, max, value) {
-  if (min === max) return value < min ? 0 : 1;
-  const x = Math.min(1, Math.max(0, (value - min) / (max - min)));
-  return x * x * (3 - 2 * x);
 }
 
 function damp(current, target, lambda, delta) {
@@ -77,8 +75,9 @@ export async function mount(context) {
   let restoreTimeout = 0;
   let simulatedRestoreTimeout = 0;
   let lastContextLossAt = null;
-  let lastPointerActivity = performance.now();
-  let flightIntensity = 0;
+  let pointerActiveUntil = 0;
+  let interactionBlend = 0;
+  let flightIntensity = context.motion.automaticFlight ? IDLE_FLIGHT_INTENSITY : 0;
   let flightDistance = 0;
   let elapsed = 0;
   let nextCelestialAt = 2 + Math.random() * 2;
@@ -264,26 +263,30 @@ export async function mount(context) {
     textureCanvas.height = 256;
     const textureContext = textureCanvas.getContext('2d');
     const gradient = textureContext.createRadialGradient(128, 128, 0, 128, 128, 128);
-    gradient.addColorStop(0, `rgba(${color},0.18)`);
-    gradient.addColorStop(0.42, `rgba(${color},0.07)`);
+    gradient.addColorStop(0, `rgba(${color},0.1)`);
+    gradient.addColorStop(0.48, `rgba(${color},0.035)`);
     gradient.addColorStop(1, `rgba(${color},0)`);
     textureContext.fillStyle = gradient;
     textureContext.fillRect(0, 0, 256, 256);
-    return new THREE.CanvasTexture(textureCanvas);
+    const texture = new THREE.CanvasTexture(textureCanvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
   }
 
   function createNebula() {
-    const colors = ['255,30,110', '40,210,230', '120,60,245', '255,105,35'];
+    const colors = ['184,28,88', '22,122,148', '88,44,178', '184,76,28'];
     for (let index = 0; index < context.quality.nebulaCount; index += 1) {
       const texture = createNebulaTexture(colors[index % colors.length]);
       const material = new THREE.SpriteMaterial({
         map: texture,
         color: 0xffffff,
-        opacity: context.quality.name === 'compact' ? 0.42 : 0.56,
-        blending: THREE.AdditiveBlending,
+        opacity: context.quality.name === 'compact' ? 0.25 : 0.32,
+        blending: THREE.NormalBlending,
+        depthTest: false,
         depthWrite: false,
         transparent: true,
       });
+      material.toneMapped = false;
       const sprite = new THREE.Sprite(material);
       sprite.position.set(
         THREE.MathUtils.randFloatSpread(1700),
@@ -385,6 +388,7 @@ export async function mount(context) {
         uTime: { value: 0 },
         uProgress: { value: 0 },
         uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+        uCenter: { value: new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2) },
         uReducedMotion: { value: reducedMotion ? 1 : 0 },
       },
       vertexShader: `
@@ -397,12 +401,11 @@ export async function mount(context) {
         uniform float uTime;
         uniform float uProgress;
         uniform vec2 uResolution;
+        uniform vec2 uCenter;
         uniform float uReducedMotion;
 
         void main() {
-          vec2 uv = gl_FragCoord.xy / uResolution;
-          vec2 point = uv - 0.5;
-          point.x *= uResolution.x / max(uResolution.y, 1.0);
+          vec2 point = (gl_FragCoord.xy - uCenter) / max(uResolution.y, 1.0);
           float distanceToCenter = length(point);
           float progress = uProgress * uProgress * (3.0 - 2.0 * uProgress);
           float radius = mix(0.002, 0.275, progress);
@@ -446,7 +449,9 @@ export async function mount(context) {
   }
 
   function resizeBlackHole() {
-    blackHole.material.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+    const drawingBufferSize = renderer.getDrawingBufferSize(new THREE.Vector2());
+    blackHole.material.uniforms.uResolution.value.copy(drawingBufferSize);
+    blackHole.material.uniforms.uCenter.value.copy(drawingBufferSize).multiplyScalar(0.5);
   }
 
   function activateBlackHole() {
@@ -457,11 +462,11 @@ export async function mount(context) {
     document.documentElement.dataset.blackHole = 'active';
     pointerTarget.set(0, 0);
     pointerCurrent.set(0, 0);
-    const logoImage = context.logo.querySelector('img');
-    const logoSize = logoImage ? Math.max(logoImage.offsetWidth, logoImage.offsetHeight) : 300;
-    const target = Math.min(window.innerWidth, window.innerHeight) * 0.22;
-    const scale = THREE.MathUtils.clamp(target / Math.max(logoSize, 1), 0.42, 1);
-    context.logo.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(4)})`;
+    pointerActiveUntil = 0;
+    interactionBlend = 0;
+    context.logo.style.transform = 'translate(-50%, -50%)';
+    blackHole.material.uniforms.uProgress.value = blackHole.progress;
+    resizeBlackHole();
   }
 
   function onLogoClick() {
@@ -483,20 +488,35 @@ export async function mount(context) {
 
   function updateScene(delta, now) {
     elapsed += delta;
-    pointerCurrent.lerp(pointerTarget, Math.min(1, delta * 5));
-    const targetFlight = context.motion.automaticFlight && !blackHole.active
-      ? smoothstep(0, 4300, now - lastPointerActivity - 3200)
+    pointerCurrent.x = damp(pointerCurrent.x, pointerTarget.x, 5.5, delta);
+    pointerCurrent.y = damp(pointerCurrent.y, pointerTarget.y, 5.5, delta);
+
+    const interactionTarget = context.motion.pointerParallax
+      && !blackHole.active
+      && now < pointerActiveUntil
+      ? 1
       : 0;
-    flightIntensity = damp(flightIntensity, targetFlight, targetFlight > flightIntensity ? 0.72 : 2.8, delta);
+    interactionBlend = damp(
+      interactionBlend,
+      interactionTarget,
+      interactionTarget > interactionBlend ? 3.2 : 0.9,
+      delta,
+    );
+    const targetFlight = context.motion.automaticFlight && !blackHole.active
+      ? THREE.MathUtils.lerp(IDLE_FLIGHT_INTENSITY, POINTER_FLIGHT_INTENSITY, interactionBlend)
+      : 0;
+    flightIntensity = damp(flightIntensity, targetFlight, 1.8, delta);
     flightDistance += delta * context.quality.flightSpeed * flightIntensity;
 
-    const pointerScale = context.motion.pointerParallax && !blackHole.active ? 1 : 0;
-    const pointerX = pointerCurrent.x * pointerScale;
-    const pointerY = pointerCurrent.y * pointerScale;
-    camera.position.x = THREE.MathUtils.lerp(camera.position.x, -pointerX * 0.035, 0.035);
-    camera.position.y = THREE.MathUtils.lerp(camera.position.y, pointerY * 0.028, 0.035);
-    camera.rotation.x = THREE.MathUtils.lerp(camera.rotation.x, -pointerY * 0.000035, 0.04);
-    camera.rotation.y = THREE.MathUtils.lerp(camera.rotation.y, -pointerX * 0.00004, 0.04);
+    const idleBlend = context.motion.automaticFlight && !blackHole.active ? 1 - interactionBlend : 0;
+    const idleX = Math.sin(elapsed * 0.17) * 18 * idleBlend;
+    const idleY = Math.sin(elapsed * 0.13) * 12 * idleBlend;
+    const pointerX = pointerCurrent.x * interactionBlend + idleX;
+    const pointerY = pointerCurrent.y * interactionBlend + idleY;
+    camera.position.x = damp(camera.position.x, -pointerX * 0.035, 3.2, delta);
+    camera.position.y = damp(camera.position.y, pointerY * 0.028, 3.2, delta);
+    camera.rotation.x = damp(camera.rotation.x, -pointerY * 0.000035, 3.5, delta);
+    camera.rotation.y = damp(camera.rotation.y, -pointerX * 0.00004, 3.5, delta);
 
     starLayers.forEach((layer) => {
       layer.material.uniforms.uTime.value = elapsed;
@@ -591,13 +611,18 @@ export async function mount(context) {
   }
 
   function onPointerMove(event) {
-    if (!context.motion.pointerParallax || (event.pointerType !== 'mouse' && event.pointerType !== 'pen')) return;
+    if (
+      blackHole.active
+      || !context.motion.pointerParallax
+      || (event.pointerType !== 'mouse' && event.pointerType !== 'pen')
+    ) return;
     pointerTarget.set(event.clientX - window.innerWidth / 2, event.clientY - window.innerHeight / 2);
-    lastPointerActivity = performance.now();
+    pointerActiveUntil = performance.now() + POINTER_ACTIVITY_HOLD_MS;
   }
 
   function resetPointer() {
     pointerTarget.set(0, 0);
+    pointerActiveUntil = 0;
   }
 
   function onVisibilityChange() {
@@ -635,6 +660,7 @@ export async function mount(context) {
       try {
         renderer.resetState();
         renderer.setSize(window.innerWidth, window.innerHeight, false);
+        resizeBlackHole();
         render();
         window.clearTimeout(restoreTimeout);
         restoreTimeout = 0;
@@ -715,14 +741,25 @@ export async function mount(context) {
     activateBlackHole,
     simulateContextLoss,
     getDiagnostics() {
+      const drawingBufferSize = renderer.getDrawingBufferSize(new THREE.Vector2());
+      const blackHoleCenter = blackHole.material.uniforms.uCenter.value;
       return {
         quality: context.quality.name,
         reducedMotion: context.motion.reducedMotion,
         pixelRatio: renderer.getPixelRatio(),
         qualityReduced,
         recovering,
+        flightIntensity,
+        flightDistance,
+        interactionBlend,
         blackHoleActive: blackHole.active,
         blackHoleProgress: blackHole.progress,
+        blackHoleCenter: { x: blackHoleCenter.x, y: blackHoleCenter.y },
+        drawingBufferSize: { width: drawingBufferSize.x, height: drawingBufferSize.y },
+        nebulaMaxOpacity: Math.max(0, ...nebulaSprites.map((sprite) => sprite.material.opacity)),
+        nebulaUsesNormalBlending: nebulaSprites.every(
+          (sprite) => sprite.material.blending === THREE.NormalBlending,
+        ),
         starCount: currentStarCount,
         celestialEventCount: celestialEvents.length,
       };

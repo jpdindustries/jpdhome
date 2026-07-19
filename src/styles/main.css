@@ -208,11 +208,14 @@ button {
   height: 32px;
   padding: 0;
   place-items: center;
-  border: 0;
+  border: 1px solid rgb(255 255 255 / 24%);
   border-radius: 50%;
-  background: transparent;
-  color: #fff;
+  background: rgb(5 4 13 / 62%);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 26%);
+  color: rgb(255 255 255 / 82%);
   cursor: pointer;
+  opacity: 0.18;
+  transition: opacity 160ms ease, border-color 160ms ease, background-color 160ms ease;
 }
 
 .mode-menu-dot {
@@ -220,11 +223,21 @@ button {
   height: 3px;
   border-radius: 50%;
   background: currentColor;
-  opacity: 0;
-  box-shadow: 0 0 5px var(--accent);
+  opacity: 1;
+  box-shadow:
+    -5px 0 0 currentColor,
+    5px 0 0 currentColor,
+    0 0 6px var(--accent);
+}
+
+.mode-menu-trigger:hover {
+  border-color: rgb(255 21 79 / 62%);
+  background: rgb(7 5 16 / 84%);
+  opacity: 0.78;
 }
 
 .mode-menu-trigger:focus-visible {
+  opacity: 1;
   outline: 1px solid rgb(255 255 255 / 78%);
   outline-offset: -3px;
 }
@@ -420,7 +433,11 @@ button {
   }
 
   .mode-menu-dot {
-    opacity: 0.52;
+    opacity: 1;
+  }
+
+  .mode-menu-trigger {
+    opacity: 0.3;
   }
 
   .mode-menu-panel {
