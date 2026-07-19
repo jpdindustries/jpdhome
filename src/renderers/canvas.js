@@ -1,0 +1,296 @@
+import { createFlightEngine } from '../animation/flight-engine.js';
+import { getTheme } from '../themes.js';
+
+function createCanvas(className) {
+  const canvas = document.createElement('canvas');
+  canvas.className = `scene-canvas ${className}`;
+  canvas.setAttribute('aria-hidden', 'true');
+  return canvas;
+}
+
+function randomStar(theme, width, height) {
+  return {
+    x: Math.random() * width,
+    y: Math.random() * height,
+    depth: 0.25 + Math.random() * 0.75,
+    size: 0.6 + Math.random() * 2.2,
+    opacity: 0.28 + Math.random() * 0.58,
+    phase: Math.random() * Math.PI * 2,
+    speed: 0.35 + Math.random() * 1.2,
+    color: theme.starColors[Math.floor(Math.random() * theme.starColors.length)],
+  };
+}
+
+export async function mountCanvasRenderer(context, themeId = 'base') {
+  if (globalThis.__JPD_TEST_HOOKS__?.canvasInitFailure) {
+    throw new Error('Forced Canvas initialization failure');
+  }
+
+  const theme = getTheme(themeId);
+  const backgroundCanvas = createCanvas('scene-canvas-background');
+  const foregroundCanvas = createCanvas('scene-canvas-foreground');
+  const flightLayer = document.createElement('div');
+  flightLayer.className = 'flight-layer';
+  flightLayer.setAttribute('aria-hidden', 'true');
+  context.container.append(backgroundCanvas, foregroundCanvas, flightLayer);
+
+  const background = backgroundCanvas.getContext('2d');
+  const foreground = foregroundCanvas.getContext('2d');
+  if (!background || !foreground) throw new Error('Canvas 2D is unavailable');
+
+  const abortController = new AbortController();
+  const { signal } = abortController;
+  const reducedMotion = context.motion.reducedMotion;
+  const flightEngine = createFlightEngine({
+    layer: flightLayer,
+    theme: theme.id,
+    assetBase: context.assetBase,
+    reducedMotion,
+    initialDelay: globalThis.__JPD_TEST_HOOKS__?.immediateFlight ? 0 : 5,
+  });
+
+  let width = 1;
+  let height = 1;
+  let pixelRatio = 1;
+  let stars = [];
+  let shootingStars = [];
+  let rafId = 0;
+  let lastTime = performance.now();
+  let elapsed = 0;
+  let nebulaElapsed = Infinity;
+  let shootingElapsed = 0;
+  let disposed = false;
+  let firstFrameResolve;
+  let firstFrameReject;
+  const firstFrame = new Promise((resolve, reject) => {
+    firstFrameResolve = resolve;
+    firstFrameReject = reject;
+  });
+
+  const pointer = {
+    x: 0,
+    y: 0,
+    targetX: 0,
+    targetY: 0,
+  };
+
+  function configureCanvas(canvas, renderingContext) {
+    canvas.width = Math.max(1, Math.round(width * pixelRatio));
+    canvas.height = Math.max(1, Math.round(height * pixelRatio));
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    renderingContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  }
+
+  function resize() {
+    width = Math.max(1, window.innerWidth);
+    height = Math.max(1, window.innerHeight);
+    pixelRatio = theme.starShape === 'pixel'
+      ? 1
+      : Math.min(window.devicePixelRatio || 1, context.quality.dprLimit);
+    configureCanvas(backgroundCanvas, background);
+    configureCanvas(foregroundCanvas, foreground);
+    const portraitCompact = height > width && width < 1200;
+    const scale = width <= 480 || portraitCompact ? 0.3 : width <= 1200 ? 0.4 : 1;
+    const count = Math.max(160, Math.round(theme.starCount * scale));
+    stars = Array.from({ length: count }, () => randomStar(theme, width, height));
+    nebulaElapsed = Infinity;
+  }
+
+  function drawNebula() {
+    background.save();
+    background.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    background.clearRect(0, 0, width, height);
+    background.fillStyle = theme.background;
+    background.fillRect(0, 0, width, height);
+    const radius = Math.max(width, height) * 0.72;
+    theme.nebula.forEach((color, index) => {
+      const phase = index * 2.39 + elapsed * (reducedMotion ? 0 : 0.018);
+      let x = width * (0.28 + index * 0.24) + Math.sin(phase) * width * 0.08;
+      let y = height * (0.3 + (index % 2) * 0.32) + Math.cos(phase * 0.77) * height * 0.08;
+      if (theme.starShape === 'pixel') {
+        x = Math.round(x / 8) * 8;
+        y = Math.round(y / 8) * 8;
+      }
+      const gradient = background.createRadialGradient(x, y, 0, x, y, radius);
+      const alpha = theme.id === 'rgb' ? 0.14 : 0.085;
+      gradient.addColorStop(0, `rgba(${color},${alpha})`);
+      gradient.addColorStop(0.45, `rgba(${color},${alpha * 0.34})`);
+      gradient.addColorStop(1, `rgba(${color},0)`);
+      background.fillStyle = gradient;
+      background.fillRect(0, 0, width, height);
+    });
+    background.restore();
+  }
+
+  function spawnShootingStar() {
+    if (shootingStars.length >= 3) return;
+    const angle = Math.PI * (0.16 + Math.random() * 0.18);
+    const rightward = Math.random() > 0.5;
+    const speed = 480 + Math.random() * 260;
+    shootingStars.push({
+      x: rightward ? -100 : width + 100,
+      y: -40 + Math.random() * height * 0.42,
+      vx: Math.cos(angle) * speed * (rightward ? 1 : -1),
+      vy: Math.sin(angle) * speed,
+      age: 0,
+      life: 0.8 + Math.random() * 0.65,
+      length: 65 + Math.random() * 100,
+    });
+  }
+
+  function updateAndDrawShootingStars(delta) {
+    if (reducedMotion) return;
+    shootingElapsed += delta;
+    if (shootingElapsed > 0.9 + Math.random() * 2.6) {
+      shootingElapsed = 0;
+      spawnShootingStar();
+    }
+    foreground.save();
+    foreground.globalCompositeOperation = 'lighter';
+    shootingStars = shootingStars.filter((star) => {
+      star.age += delta;
+      star.x += star.vx * delta;
+      star.y += star.vy * delta;
+      if (star.age >= star.life) return false;
+      const alpha = Math.sin((star.age / star.life) * Math.PI) * 0.58;
+      const speed = Math.hypot(star.vx, star.vy);
+      const dx = (star.vx / speed) * star.length;
+      const dy = (star.vy / speed) * star.length;
+      const gradient = foreground.createLinearGradient(star.x, star.y, star.x - dx, star.y - dy);
+      gradient.addColorStop(0, `rgba(225,232,255,${alpha})`);
+      gradient.addColorStop(1, 'rgba(130,150,190,0)');
+      foreground.strokeStyle = gradient;
+      foreground.lineWidth = theme.starShape === 'pixel' ? 2 : 1.5;
+      foreground.beginPath();
+      foreground.moveTo(star.x, star.y);
+      foreground.lineTo(star.x - dx, star.y - dy);
+      foreground.stroke();
+      return true;
+    });
+    foreground.restore();
+  }
+
+  function drawStars(delta) {
+    foreground.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    foreground.clearRect(0, 0, width, height);
+    const automaticX = reducedMotion ? 0 : Math.sin(elapsed * 0.105) * 42;
+    const automaticY = reducedMotion ? 0 : Math.sin(elapsed * 0.14) * 32;
+    pointer.x += (pointer.targetX - pointer.x) * Math.min(1, delta * 4.8);
+    pointer.y += (pointer.targetY - pointer.y) * Math.min(1, delta * 4.8);
+    const px = pointer.x + automaticX;
+    const py = pointer.y + automaticY;
+    for (const star of stars) {
+      let x = star.x - px * star.depth * 0.055;
+      let y = star.y - py * star.depth * 0.055;
+      const opacity = Math.max(0.12, star.opacity + Math.sin(elapsed * star.speed + star.phase) * 0.14);
+      const size = star.size * (0.62 + star.depth * 0.55);
+      foreground.fillStyle = `rgba(${star.color},${opacity})`;
+      if (theme.starShape === 'pixel') {
+        x = Math.round(x / 2) * 2;
+        y = Math.round(y / 2) * 2;
+        const pixelSize = Math.max(1, Math.round(size));
+        foreground.fillRect(x, y, pixelSize, pixelSize);
+      } else {
+        foreground.beginPath();
+        foreground.arc(x, y, Math.max(0.35, size * 0.5), 0, Math.PI * 2);
+        foreground.fill();
+      }
+    }
+    updateAndDrawShootingStars(delta);
+  }
+
+  function updateLogo(delta) {
+    if (!context.motion.pointerParallax) {
+      context.logo.style.transform = 'translate(-50%, -50%)';
+      return;
+    }
+    const ratio = width <= 820 ? 0.02 : width <= 1200 ? 0.04 : 0.065;
+    const x = -pointer.x * ratio;
+    const y = -pointer.y * ratio;
+    context.logo.style.transform = `translate(calc(-50% + ${x.toFixed(2)}px), calc(-50% + ${y.toFixed(2)}px))`;
+  }
+
+  function renderFrame(now) {
+    if (disposed || document.hidden) return;
+    try {
+      const delta = globalThis.__JPD_TEST_HOOKS__?.freezeScene
+        ? 0
+        : Math.min(0.05, Math.max(0, (now - lastTime) / 1000));
+      lastTime = now;
+      elapsed += delta;
+      nebulaElapsed += delta;
+      if (nebulaElapsed >= (reducedMotion ? 4 : 0.1)) {
+        drawNebula();
+        nebulaElapsed = 0;
+      }
+      drawStars(delta);
+      flightEngine.update(delta, elapsed);
+      flightEngine.drawParticles(foreground);
+      updateLogo(delta);
+      firstFrameResolve?.();
+      firstFrameResolve = null;
+      firstFrameReject = null;
+      rafId = requestAnimationFrame(renderFrame);
+    } catch (error) {
+      firstFrameReject?.(error);
+      firstFrameResolve = null;
+      firstFrameReject = null;
+      context.onFatal?.('init-failed', error);
+    }
+  }
+
+  function onPointerMove(event) {
+    if (!context.motion.pointerParallax || (event.pointerType !== 'mouse' && event.pointerType !== 'pen')) return;
+    pointer.targetX = event.clientX - width / 2;
+    pointer.targetY = event.clientY - height / 2;
+  }
+
+  function onVisibilityChange() {
+    if (document.hidden) {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+    } else if (!disposed && !rafId) {
+      lastTime = performance.now();
+      rafId = requestAnimationFrame(renderFrame);
+    }
+  }
+
+  resize();
+  drawNebula();
+  window.addEventListener('resize', resize, { signal });
+  document.addEventListener('pointermove', onPointerMove, { signal });
+  document.addEventListener('pointerleave', () => {
+    pointer.targetX = 0;
+    pointer.targetY = 0;
+  }, { signal });
+  document.addEventListener('visibilitychange', onVisibilityChange, { signal });
+  rafId = requestAnimationFrame(renderFrame);
+  await firstFrame;
+
+  return {
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      cancelAnimationFrame(rafId);
+      abortController.abort();
+      flightEngine.dispose();
+      backgroundCanvas.remove();
+      foregroundCanvas.remove();
+      flightLayer.remove();
+      context.logo.style.transform = 'translate(-50%, -50%)';
+    },
+    getDiagnostics() {
+      return {
+        theme: theme.id,
+        reducedMotion,
+        starCount: stars.length,
+        shootingStarCount: shootingStars.length,
+        flight: flightEngine.getDiagnostics(),
+      };
+    },
+    spawnFlyby(type) {
+      return flightEngine.spawn(type);
+    },
+  };
+}

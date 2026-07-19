@@ -1,5 +1,7 @@
 services:
   webserver:
-    image: ghcr.io/jpdindustries/jpdhome:multi
+    build:
+      context: .
+    image: jpdhome:local
     ports:
-      - 8080:80
+      - "8080:80"

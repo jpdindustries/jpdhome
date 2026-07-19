@@ -1,0 +1,98 @@
+import { test, expect } from '@playwright/test';
+import { isChromiumDesktop, waitForScene } from './helpers.js';
+
+function angleDifference(first, second) {
+  return Math.atan2(Math.sin(first - second), Math.cos(first - second));
+}
+
+for (const theme of ['base', 'retro', 'rgb']) {
+  test(`${theme} uses curved offscreen flybys with bounded trails`, async ({ page }, testInfo) => {
+    test.skip(!isChromiumDesktop(testInfo.project.name));
+    await page.goto(`/?v=${theme}`);
+    await waitForScene(page);
+    const spawned = await page.evaluate(() => window.__JPD_DIAGNOSTICS__.spawnFlyby('rocket'));
+    expect(spawned).toBe(true);
+    await page.waitForTimeout(180);
+    const diagnostics = await page.evaluate(() => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics());
+    const flight = diagnostics.flight;
+    expect(flight.active).not.toBeNull();
+    const { start, end, control1, control2 } = flight.active.path;
+    const width = await page.evaluate(() => innerWidth);
+    const height = await page.evaluate(() => innerHeight);
+    const offscreen = (point) => point.x < 0 || point.x > width || point.y < 0 || point.y > height;
+    expect(offscreen(start)).toBe(true);
+    expect(offscreen(end)).toBe(true);
+    expect(control1).not.toEqual(start);
+    expect(control2).not.toEqual(end);
+    expect(Math.abs(angleDifference(
+      flight.active.rotation,
+      flight.active.tangentAngle + Math.PI / 2,
+    ))).toBeLessThan(0.2);
+    expect(flight.particleCount).toBeLessThanOrEqual(flight.maxParticles);
+    if (theme === 'retro') {
+      expect(Math.abs(flight.active.point.x % 4)).toBeLessThan(0.001);
+      expect(Math.abs(flight.active.point.y % 4)).toBeLessThan(0.001);
+    }
+  });
+}
+
+test('Canvas resize and visibility handlers pause and resume one flight loop', async ({ page }, testInfo) => {
+  test.skip(!isChromiumDesktop(testInfo.project.name));
+  await page.goto('/?v=base');
+  await waitForScene(page);
+  await page.evaluate(() => window.__JPD_DIAGNOSTICS__.spawnFlyby('rocket'));
+  await page.waitForTimeout(150);
+  const pausedAt = await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    return window.__JPD_DIAGNOSTICS__.getRendererDiagnostics().flight.active.point;
+  });
+  await page.waitForTimeout(220);
+  const whilePaused = await page.evaluate(() => (
+    window.__JPD_DIAGNOSTICS__.getRendererDiagnostics().flight.active.point
+  ));
+  expect(whilePaused).toEqual(pausedAt);
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForTimeout(180);
+  const afterResume = await page.evaluate(() => (
+    window.__JPD_DIAGNOSTICS__.getRendererDiagnostics().flight.active.point
+  ));
+  expect(afterResume).not.toEqual(whilePaused);
+
+  await page.setViewportSize({ width: 900, height: 600 });
+  await expect.poll(() => page.locator('.scene-canvas').first().evaluate((canvas) => [canvas.width, canvas.height]))
+    .toEqual([900, 600]);
+  await expect(page.locator('.scene-canvas')).toHaveCount(2);
+});
+
+test('reduced motion stays ambient-only', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'reduced-motion');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/?v=base');
+  await waitForScene(page);
+  expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
+  await page.mouse.move(1000, 500);
+  await page.waitForTimeout(150);
+  const diagnostics = await page.evaluate(() => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics());
+  expect(diagnostics.shootingStarCount).toBe(0);
+  expect(diagnostics.flight.active).toBeNull();
+  expect(await page.evaluate(() => window.__JPD_DIAGNOSTICS__.spawnFlyby('rocket'))).toBe(false);
+  await expect(page.locator('#logo-trigger')).toHaveCSS('transform', /matrix\(1, 0, 0, 1, -/);
+});
+
+test('reduced motion reveals the black-hole final state without growth', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'reduced-motion');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/?v=webgl');
+  await waitForScene(page);
+  await page.locator('#logo-trigger').click({ clickCount: 3 });
+  await expect(page.locator('html')).toHaveAttribute('data-black-hole', 'active');
+  await expect.poll(async () => {
+    const diagnostics = await page.evaluate(() => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics());
+    return diagnostics.blackHoleProgress;
+  }).toBe(1);
+});

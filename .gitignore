@@ -1,9 +1,10 @@
-# Temporary files
+# Build and test output
+dist/
+node_modules/
+playwright-report/
+test-results/
 screenshots/
 .kilo/
-
-# Node modules (if any)
-node_modules/
 
 # OS files
 .DS_Store

@@ -1,18 +1,18 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
+<!doctype html>
+<html lang="en" data-requested-mode="auto" data-renderer="" data-scene-status="loading">
+  <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>jpd.industries</title>
     <meta name="description" content="A space-themed placeholder for jpd.industries with interactive starfield visuals.">
     <meta name="robots" content="index, follow">
-    <meta name="color-scheme" content="dark light">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#ff154f">
     <link rel="canonical" href="https://jpd.industries/">
-    <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="icon" type="image/png" href="/base/assets/jpdico.png">
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-    <link rel="manifest" href="/manifest.webmanifest">
-    <meta name="theme-color" content="#FF0000">
+    <link rel="icon" href="./favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" href="./assets/jpdico.png">
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+    <link rel="manifest" href="./manifest.webmanifest">
     <meta property="og:title" content="jpd.industries">
     <meta property="og:description" content="A space-themed placeholder for jpd.industries with interactive starfield visuals.">
     <meta property="og:url" content="https://jpd.industries/">
@@ -25,48 +25,34 @@
     <meta name="twitter:title" content="jpd.industries">
     <meta name="twitter:description" content="A space-themed placeholder for jpd.industries with interactive starfield visuals.">
     <meta name="twitter:image" content="https://jpd.industries/assets/og-image.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Bitcount+Prop+Single:wght@100..900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles/loading.css">
     <script type="application/ld+json">
-        {
-            "@context": "https://schema.org",
-            "@type": "WebSite",
-            "name": "jpd.industries",
-            "url": "https://jpd.industries/",
-            "description": "A space-themed placeholder for jpd.industries with interactive starfield visuals.",
-            "publisher": {
-                "@type": "Organization",
-                "name": "JPD Industries",
-                "url": "https://jpd.industries/",
-                "logo": "https://jpd.industries/assets/icon-512.png",
-                "sameAs": [
-                    "https://github.com/jpdindustries/jpdhome"
-                ]
-            }
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "jpd.industries",
+        "url": "https://jpd.industries/",
+        "description": "A space-themed placeholder for jpd.industries with interactive starfield visuals.",
+        "publisher": {
+          "@type": "Organization",
+          "name": "JPD Industries",
+          "url": "https://jpd.industries/",
+          "logo": "https://jpd.industries/assets/icon-512.png",
+          "sameAs": ["https://github.com/jpdindustries/jpdhome"]
         }
+      }
     </script>
-</head>
-<body>
-    <div id="loading-screen" class="loading-screen">
-        <div class="loading-text">Detecting capabilities...</div>
-        <div id="gpu-info" class="gpu-info" style="display: none;"></div>
-        <div id="performance-meter" class="performance-meter" style="display: none;">
-            <div class="fps-gauge">
-                <svg class="fps-gauge-svg" width="120" height="120" viewBox="0 0 120 120">
-                    <circle cx="60" cy="60" r="50" fill="none" stroke="#333" stroke-width="8" class="fps-gauge-background"></circle>
-                    <circle id="fps-gauge-fill" cx="60" cy="60" r="50" fill="none" stroke="#FF0000" stroke-width="8" stroke-linecap="round" stroke-dasharray="314.16" stroke-dashoffset="314.16" class="fps-gauge-fill" transform="rotate(90 60 60)"></circle>
-                </svg>
-                <div class="fps-value"><span id="fps-value">--</span></div>
-            </div>
-            <div class="progress-bar">
-                <div id="progress-fill" class="progress-fill"></div>
-            </div>
-        </div>
-        <div class="loading-version">©jpd.industries v0.1</div>
-    </div>
-
-    <script src="scripts/detector.js"></script>
-</body>
+  </head>
+  <body>
+    <main id="app">
+      <div id="scene" aria-hidden="true"></div>
+      <button id="logo-trigger" type="button" aria-label="JPD Industries logo">
+        <img id="logo" src="./assets/jpdlogo.png" alt="JPD Industries">
+      </button>
+      <div id="scene-loader" role="status" aria-live="polite">
+        <span class="scene-loader-dot" aria-hidden="true"></span>
+        <span class="visually-hidden">Loading scene</span>
+      </div>
+    </main>
+    <script type="module" src="./src/main.js"></script>
+  </body>
 </html>
