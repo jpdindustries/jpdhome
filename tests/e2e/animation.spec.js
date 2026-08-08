@@ -36,6 +36,28 @@ for (const theme of ['base', 'retro', 'rgb']) {
   });
 }
 
+for (const [theme, trail] of [['base', 'neutral'], ['rgb', 'rainbow']]) {
+  test(`${theme} automatically shows an onscreen object with its ${trail} trail`, async ({ page }, testInfo) => {
+    test.skip(!isChromiumDesktop(testInfo.project.name));
+    await page.goto(`/?v=${theme}`);
+    await waitForScene(page);
+
+    await expect.poll(async () => {
+      const diagnostics = await page.evaluate(
+        () => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics(),
+      );
+      return diagnostics.flight.active?.visible || false;
+    }, { timeout: 7_000 }).toBe(true);
+
+    const diagnostics = await page.evaluate(
+      () => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics(),
+    );
+    expect(diagnostics.flight.active.trail).toBe(trail);
+    expect(diagnostics.flight.particleCounts[trail]).toBeGreaterThan(0);
+    await expect(page.locator('.flight-object')).toHaveCount(1);
+  });
+}
+
 test('Canvas resize and visibility handlers pause and resume one flight loop', async ({ page }, testInfo) => {
   test.skip(!isChromiumDesktop(testInfo.project.name));
   await page.goto('/?v=base');
