@@ -23,6 +23,20 @@ const RAINBOW = Object.freeze([
   [255, 44, 236],
 ]);
 
+const FLIGHT_SCHEDULES = Object.freeze({
+  base: { initial: 1.35, gapMin: 1.8, gapRange: 3.4 },
+  retro: { initial: 1.6, gapMin: 2, gapRange: 4 },
+  rgb: { initial: 0.55, gapMin: 0.65, gapRange: 1.35 },
+});
+
+const RGB_OBJECT_POOL = Object.freeze([
+  'rocket',
+  'meteorite',
+  'rocket',
+  'satellite',
+  'astronaut',
+]);
+
 export function createFlightEngine({
   layer,
   theme = 'base',
@@ -30,12 +44,13 @@ export function createFlightEngine({
   reducedMotion = false,
   rng = Math.random,
   maxParticles = theme === 'rgb' ? 224 : 160,
-  initialDelay = 5,
+  initialDelay,
 } = {}) {
+  const schedule = FLIGHT_SCHEDULES[theme] || FLIGHT_SCHEDULES.base;
   const particles = Array.from({ length: maxParticles }, () => ({ active: false }));
   let particleCursor = 0;
   let active = null;
-  let untilNext = initialDelay;
+  let untilNext = Number.isFinite(initialDelay) ? Math.max(0, initialDelay) : schedule.initial;
   let disposed = false;
 
   function acquireParticle() {
@@ -46,28 +61,46 @@ export function createFlightEngine({
 
   function emitParticle(point, tangent, profile) {
     const particle = acquireParticle();
-    const spread = profile.trail === 'rainbow' ? 5 : 2.5;
+    const rainbow = profile.trail === 'rainbow';
+    const spread = rainbow ? 8 : 3;
+    const originX = point.x - tangent.x * profile.width * 0.42;
+    const originY = point.y - tangent.y * profile.width * 0.42;
     particle.active = true;
-    particle.x = point.x - tangent.x * profile.width * 0.42 + (rng() - 0.5) * spread;
-    particle.y = point.y - tangent.y * profile.width * 0.42 + (rng() - 0.5) * spread;
-    particle.vx = -tangent.x * (8 + rng() * 11) + (rng() - 0.5) * 4;
-    particle.vy = -tangent.y * (8 + rng() * 11) + (rng() - 0.5) * 4;
+    particle.x = originX + (rng() - 0.5) * spread;
+    particle.y = originY + (rng() - 0.5) * spread;
+    particle.originX = particle.x;
+    particle.originY = particle.y;
+    particle.dirX = -tangent.x;
+    particle.dirY = -tangent.y;
+    particle.vx = particle.dirX * (28 + rng() * 34) + (rng() - 0.5) * 7;
+    particle.vy = particle.dirY * (28 + rng() * 34) + (rng() - 0.5) * 7;
     particle.nx = -tangent.y;
     particle.ny = tangent.x;
     particle.age = 0;
-    particle.life = profile.trail === 'rainbow' ? 0.95 + rng() * 0.45 : 0.65 + rng() * 0.55;
+    particle.life = rainbow ? 0.72 + rng() * 0.42 : 0.7 + rng() * 0.55;
     particle.size = profile.trail === 'pixel' ? 2 + Math.floor(rng() * 3) : 1.3 + rng() * 2.1;
     particle.trail = profile.trail;
-    particle.colorOffset = Math.floor(rng() * RAINBOW.length);
+    if (rainbow) {
+      particle.speed = 145 + rng() * 95;
+      particle.segmentLength = 54 + rng() * 36;
+      particle.spread = 0.075 + rng() * 0.055;
+      particle.baseWidth = 9 + rng() * 4;
+      particle.wobble = 3 + rng() * 6;
+      particle.wobblePhase = rng() * Math.PI * 2;
+    }
+  }
+
+  function chooseObjectType(requestedType) {
+    if (OBJECT_IDS.includes(requestedType)) return requestedType;
+    const pool = theme === 'rgb' ? RGB_OBJECT_POOL : OBJECT_IDS;
+    return pool[Math.floor(rng() * pool.length) % pool.length];
   }
 
   function spawn(requestedType) {
     if (disposed || reducedMotion || active) return false;
-    const type = OBJECT_IDS.includes(requestedType)
-      ? requestedType
-      : OBJECT_IDS[Math.floor(rng() * OBJECT_IDS.length) % OBJECT_IDS.length];
+    const type = chooseObjectType(requestedType);
     const profile = getObjectProfile(type, theme);
-    const buffer = profile.width * 3 + 64;
+    const buffer = Math.max(110, profile.width * 2 + 48);
     const path = generateFlybyPath({
       width: window.innerWidth,
       height: window.innerHeight,
@@ -80,6 +113,8 @@ export function createFlightEngine({
     element.className = 'flight-object';
     element.alt = '';
     element.setAttribute('aria-hidden', 'true');
+    element.decoding = 'async';
+    element.draggable = false;
     element.src = new URL(FILES[type], assetBase).href;
     element.width = profile.width;
     element.style.width = `${profile.width}px`;
@@ -104,7 +139,7 @@ export function createFlightEngine({
   function finishFlight() {
     active?.element.remove();
     active = null;
-    untilNext = 2 + rng() * 8;
+    untilNext = schedule.gapMin + rng() * schedule.gapRange;
   }
 
   function updateParticles(delta) {
@@ -115,6 +150,7 @@ export function createFlightEngine({
         particle.active = false;
         continue;
       }
+      if (particle.trail === 'rainbow') continue;
       particle.x += particle.vx * delta;
       particle.y += particle.vy * delta;
       particle.vx *= Math.max(0, 1 - delta * 1.6);
@@ -167,13 +203,55 @@ export function createFlightEngine({
     active.element.style.transform = `translate3d(${(x - profile.width / 2).toFixed(2)}px, ${(y - profile.width / 2).toFixed(2)}px, 0) rotate(${rotation.toFixed(4)}rad)`;
 
     active.emitElapsed += safeDelta;
-    const emitInterval = profile.trail === 'rainbow' ? 0.045 : 0.065;
+    const emitInterval = profile.trail === 'rainbow' ? 0.034 : 0.058;
     while (active.emitElapsed >= emitInterval) {
       active.emitElapsed -= emitInterval;
       emitParticle(active.point, tangent, profile);
     }
 
     if (progress >= 1) finishFlight();
+  }
+
+  function drawRainbowParticle(context, particle, life) {
+    const endDistance = particle.age * particle.speed;
+    const startDistance = Math.max(0, endDistance - particle.segmentLength);
+    const nearWidth = particle.baseWidth + startDistance * particle.spread;
+    const farWidth = particle.baseWidth + endDistance * particle.spread;
+    const nearX = particle.originX + particle.dirX * startDistance;
+    const nearY = particle.originY + particle.dirY * startDistance;
+    const farX = particle.originX + particle.dirX * endDistance;
+    const farY = particle.originY + particle.dirY * endDistance;
+    const wobbleNear = Math.sin(particle.age * 11 + particle.wobblePhase) * particle.wobble * 0.28;
+    const wobbleFar = Math.sin(particle.age * 11 + particle.wobblePhase + 0.9) * particle.wobble;
+    const fadeIn = Math.min(1, particle.age / 0.09);
+    const alpha = Math.pow(life, 0.82) * fadeIn * 0.52;
+
+    RAINBOW.forEach((color, index) => {
+      const nearA = -nearWidth / 2 + (nearWidth / RAINBOW.length) * index;
+      const nearB = -nearWidth / 2 + (nearWidth / RAINBOW.length) * (index + 1);
+      const farA = -farWidth / 2 + (farWidth / RAINBOW.length) * index;
+      const farB = -farWidth / 2 + (farWidth / RAINBOW.length) * (index + 1);
+      context.fillStyle = `rgba(${color.join(',')},${alpha})`;
+      context.beginPath();
+      context.moveTo(
+        nearX + particle.nx * (nearA + wobbleNear),
+        nearY + particle.ny * (nearA + wobbleNear),
+      );
+      context.lineTo(
+        nearX + particle.nx * (nearB + wobbleNear),
+        nearY + particle.ny * (nearB + wobbleNear),
+      );
+      context.lineTo(
+        farX + particle.nx * (farB + wobbleFar),
+        farY + particle.ny * (farB + wobbleFar),
+      );
+      context.lineTo(
+        farX + particle.nx * (farA + wobbleFar),
+        farY + particle.ny * (farA + wobbleFar),
+      );
+      context.closePath();
+      context.fill();
+    });
   }
 
   function drawParticles(context) {
@@ -183,31 +261,30 @@ export function createFlightEngine({
       const life = 1 - particle.age / particle.life;
       if (particle.trail === 'rainbow') {
         context.globalCompositeOperation = 'lighter';
-        const width = 11 + (1 - life) * 14;
-        const stripe = width / RAINBOW.length;
-        RAINBOW.forEach((color, index) => {
-          const colorIndex = (index + particle.colorOffset) % RAINBOW.length;
-          const offset = -width / 2 + stripe * (index + 0.5);
-          context.strokeStyle = `rgba(${RAINBOW[colorIndex].join(',')},${life * 0.4})`;
-          context.lineWidth = Math.max(1, stripe);
-          context.beginPath();
-          context.moveTo(particle.x + particle.nx * offset, particle.y + particle.ny * offset);
-          context.lineTo(
-            particle.x + particle.nx * offset + particle.vx * 0.08,
-            particle.y + particle.ny * offset + particle.vy * 0.08,
-          );
-          context.stroke();
-        });
+        drawRainbowParticle(context, particle, life);
       } else if (particle.trail === 'pixel') {
         context.globalCompositeOperation = 'source-over';
+        context.shadowBlur = 0;
         context.fillStyle = `rgba(208,218,245,${life * 0.48})`;
         const size = Math.max(1, Math.round(particle.size * life));
         context.fillRect(Math.round(particle.x / 2) * 2, Math.round(particle.y / 2) * 2, size, size);
       } else {
         context.globalCompositeOperation = 'lighter';
-        context.fillStyle = `rgba(202,214,238,${life * 0.34})`;
+        context.shadowColor = `rgba(168,202,255,${life * 0.42})`;
+        context.shadowBlur = 5;
+        context.strokeStyle = `rgba(202,220,255,${life * 0.42})`;
+        context.lineWidth = Math.max(0.7, particle.size * life);
+        const streakLength = 9 + (1 - life) * 21;
         context.beginPath();
-        context.arc(particle.x, particle.y, Math.max(0.3, particle.size * life), 0, Math.PI * 2);
+        context.moveTo(particle.x, particle.y);
+        context.lineTo(
+          particle.x + particle.dirX * streakLength,
+          particle.y + particle.dirY * streakLength,
+        );
+        context.stroke();
+        context.fillStyle = `rgba(225,235,255,${life * 0.46})`;
+        context.beginPath();
+        context.arc(particle.x, particle.y, Math.max(0.4, particle.size * life), 0, Math.PI * 2);
         context.fill();
       }
     }
@@ -219,6 +296,10 @@ export function createFlightEngine({
     drawParticles,
     spawn,
     getDiagnostics() {
+      const particleCounts = particles.reduce((counts, particle) => {
+        if (particle.active) counts[particle.trail] = (counts[particle.trail] || 0) + 1;
+        return counts;
+      }, {});
       return {
         active: active
           ? {
@@ -229,10 +310,17 @@ export function createFlightEngine({
               point: active.point,
               tangentAngle: active.tangent.angle,
               rotation: active.rotation,
+              trail: active.profile.trail,
+              visible: active.point.x >= 0
+                && active.point.x <= window.innerWidth
+                && active.point.y >= 0
+                && active.point.y <= window.innerHeight,
             }
           : null,
         particleCount: particles.filter((particle) => particle.active).length,
+        particleCounts,
         maxParticles,
+        untilNext,
       };
     },
     dispose() {

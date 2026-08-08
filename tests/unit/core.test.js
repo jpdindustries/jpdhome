@@ -56,6 +56,10 @@ test('cubic Bézier helpers produce a curved, measured offscreen flyby', () => {
   assert.equal(isOffscreen(path.end, 1200, 700), true);
   assert.deepEqual(cubicBezierPoint(path, 0), path.start);
   assert.deepEqual(cubicBezierPoint(path, 1), path.end);
+  const visibleSamples = Array.from({ length: 31 }, (_, sample) => (
+    cubicBezierPoint(path, sample / 30)
+  )).filter((point) => !isOffscreen(point, 1200, 700));
+  assert.ok(visibleSamples.length >= 10);
   const directDistance = Math.hypot(path.end.x - path.start.x, path.end.y - path.start.y);
   assert.ok(approximateBezierLength(path, 64) > directDistance);
   const tangent = cubicBezierTangent(path, 0.5);
