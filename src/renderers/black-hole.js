@@ -135,8 +135,8 @@ function createDistortionMaterial() {
         float photon = softBand(
           distanceToCenter,
           coreRadius * 1.018,
-          max(pixel * 1.5, coreRadius * 0.007),
-          max(pixel * 2.6, coreRadius * 0.013)
+          max(pixel * 1.25, coreRadius * 0.006),
+          max(pixel * 4.5, coreRadius * 0.028)
         );
         float strength = clamp(
           field * (0.8 + progress * 0.2) + photon * 0.2,
@@ -319,18 +319,27 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
         vec2 warped = centered - radial * (pull + movingPull) + tangent * swirl;
         vec2 warpedUv = centerUv + warped * minDimension / uResolution;
 
+        float rimNoise = mix(
+          lensNoise,
+          noise(
+            rotate2d(flowTime * 0.035) * centered * 46.0
+              + vec2(flowTime * 0.12, -flowTime * 0.08)
+          ),
+          0.42
+        );
+        float rimOffset = (rimNoise - 0.5) * coreRadius * 0.052;
         float photonRing = softBand(
           distanceToCenter,
-          coreRadius * 1.018,
-          max(pixel * 1.5, coreRadius * 0.0065),
-          max(pixel * 2.8, coreRadius * 0.012)
-        );
+          coreRadius * 1.018 + rimOffset,
+          max(pixel * 1.25, coreRadius * 0.006),
+          max(pixel * 4.5, coreRadius * 0.028)
+        ) * mix(0.52, 1.0, smoother(rimNoise));
         float photonGlow = softBand(
           distanceToCenter,
-          coreRadius * 1.042,
-          max(pixel * 5.0, coreRadius * 0.036),
-          max(pixel * 9.0, coreRadius * 0.044)
-        );
+          coreRadius * 1.04 + rimOffset * 0.72,
+          max(pixel * 5.0, coreRadius * 0.04),
+          max(pixel * 12.0, coreRadius * 0.074)
+        ) * mix(0.72, 1.0, rimNoise);
         float lensHalo = smoothstep(
           coreRadius * 0.82,
           coreRadius * 1.04,
@@ -383,27 +392,28 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
           0.0,
           1.0
         );
-        float verticalWindow = 1.0 - smoothstep(
-          coreRadius * 0.22,
-          coreRadius * 0.94,
-          abs(diskPoint.y)
-        );
-        float diskWindow = smoothstep(
-          diskInner,
-          coreRadius + edge * 5.0,
+        float diskEnvelope = smoothstep(
+          diskInner - coreRadius * 0.16,
+          diskInner + coreRadius * 0.22,
           diskDistance
         ) * (
           1.0 - smoothstep(
-            diskOuter - edge * 18.0,
-            diskOuter,
+            diskOuter - diskRange * 0.34,
+            diskOuter + diskRange * 0.12,
             diskDistance
           )
-        ) * verticalWindow * mix(0.36, 1.0, progress);
+        ) * (
+          1.0 - smoothstep(
+            coreRadius * 0.12,
+            coreRadius * 1.24,
+            abs(diskPoint.y)
+          )
+        );
         vec2 coarseFlow = rotate2d(flowTime * 0.24) * flattenedDisk;
         vec2 fineFlow = rotate2d(-flowTime * 0.39) * flattenedDisk;
-        float cloudNoise = 0.0;
-        float fineCloud = 0.0;
-        if (diskWindow > 0.001) {
+        float cloudNoise = 0.5;
+        float fineCloud = 0.5;
+        if (diskEnvelope > 0.001) {
           cloudNoise = fbm(
             coarseFlow * 7.2 + vec2(flowTime * 0.16, -flowTime * 0.07)
           );
@@ -411,6 +421,27 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
             fineFlow * 17.0 + vec2(-flowTime * 0.2, flowTime * 0.11)
           );
         }
+        float boundaryDrift = (cloudNoise - 0.5) * diskRange * 0.18
+          + (fineCloud - 0.5) * diskRange * 0.055;
+        float softenedDiskDistance = diskDistance + boundaryDrift;
+        float verticalDrift = (cloudNoise - 0.5) * coreRadius * 0.24
+          + (fineCloud - 0.5) * coreRadius * 0.06;
+        float verticalWindow = 1.0 - smoothstep(
+          coreRadius * 0.12,
+          coreRadius * 1.12,
+          abs(diskPoint.y) + verticalDrift
+        );
+        float diskWindow = smoothstep(
+          diskInner - coreRadius * 0.12,
+          coreRadius * 1.06,
+          softenedDiskDistance
+        ) * (
+          1.0 - smoothstep(
+            diskOuter - diskRange * 0.28,
+            diskOuter + diskRange * 0.08,
+            softenedDiskDistance
+          )
+        ) * verticalWindow * mix(0.36, 1.0, progress);
         float orbitAngle = atan(flattenedDisk.y, flattenedDisk.x);
         float streams = 0.5 + 0.5 * sin(
           orbitAngle * 10.0
@@ -425,7 +456,7 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
               + diskDistance * 52.0
               + fineCloud * 2.0
           ),
-          3.0
+          1.65
         );
         float orbitArc = pow(
           0.5 + 0.5 * cos(
@@ -433,7 +464,7 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
               - flowTime * 1.4
               - diskNorm * 2.4
           ),
-          4.0
+          2.1
         );
         float frontFeather = smoothstep(
           -coreRadius * 0.2,
@@ -445,24 +476,27 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
           0.9,
           diskPoint.x / max(distanceToCenter, 0.001)
         );
-        float edgeAttenuation = smoothstep(0.0, 0.08, diskNorm)
-          * (1.0 - smoothstep(0.84, 1.0, diskNorm));
+        float radialEnergy = mix(
+          0.48,
+          1.0,
+          smoother(1.0 - abs(diskNorm * 2.0 - 1.0))
+        );
         float cloud = diskWindow
-          * edgeAttenuation
+          * radialEnergy
           * (
-            0.08
-              + cloudNoise * 0.3
-              + fineCloud * 0.1
-              + streams * 0.24
-              + orbitPulse * 0.34
-              + orbitArc * 0.2
+            0.1
+              + cloudNoise * 0.34
+              + fineCloud * 0.12
+              + streams * 0.18
+              + orbitPulse * 0.26
+              + orbitArc * 0.16
           )
           * mix(0.64, 1.0, frontFeather)
           * (0.86 + doppler * 0.04);
         float flowHighlight = diskWindow
-          * edgeAttenuation
-          * max(orbitPulse, orbitArc * 0.72)
-          * (0.3 + fineCloud * 0.7);
+          * radialEnergy
+          * (orbitPulse * 0.58 + orbitArc * 0.3)
+          * (0.24 + fineCloud * 0.54);
         vec2 speckPoint = rotate2d(flowTime * 0.3) * flattenedDisk;
         vec2 speckUv = speckPoint * minDimension * 0.29
           + vec2(flowTime * 19.0, -flowTime * 5.0);
@@ -474,8 +508,22 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
 
         sceneRgb *= 1.0 - broadLens * 0.05;
         sceneRgb *= 1.0 - interiorMask * 0.985;
-        cloud *= 1.0 - interiorMask * 0.92;
-        specks *= 1.0 - interiorMask;
+        float frontLayer = smoothstep(
+          coreRadius * 0.04,
+          coreRadius * 0.48,
+          diskPoint.y
+        );
+        float foregroundSkim = frontLayer
+          * smoothstep(
+            coreRadius * 0.72,
+            coreRadius * 0.98,
+            distanceToCenter
+          )
+          * 0.22;
+        float diskVisibility = max(1.0 - interiorMask, foregroundSkim);
+        cloud *= diskVisibility;
+        flowHighlight *= diskVisibility;
+        specks *= diskVisibility;
 
         vec3 diskColor = mix(
           vec3(1.0, 0.32, 0.075),
@@ -497,8 +545,8 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
           * uDiskReveal;
         color += specks * vec3(1.0, 0.68, 0.3) * 0.55 * uDiskReveal;
         color += vec3(1.0, 0.88, 0.58)
-          * max(photonRing, photonFromPass * 0.62)
-          * 1.12
+          * max(photonRing, photonFromPass * 0.35)
+          * 1.04
           * rimFlow
           * uRimReveal;
         color += vec3(1.0, 0.7, 0.36)
@@ -518,9 +566,9 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
           distanceToCenter,
           coreRadius * 0.93,
           max(pixel * 2.0, coreRadius * 0.065),
-          edge * 5.0
+          max(edge * 5.0, coreRadius * 0.04)
         );
-        color *= 1.0 - apertureShadow * 0.38;
+        color *= 1.0 - apertureShadow * 0.3;
 
         float lensMask = (
           1.0 - smoothstep(
@@ -530,7 +578,7 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
           )
         ) * uLensReveal;
         float lightMask = clamp(
-          max(photonRing, photonFromPass * 0.62) * uRimReveal
+          max(photonRing, photonFromPass * 0.35) * uRimReveal
             + photonGlow * 0.42 * uRimReveal
             + cloud * 0.82 * uDiskReveal
             + specks * 0.8 * uDiskReveal
