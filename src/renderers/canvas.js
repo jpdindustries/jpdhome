@@ -1,5 +1,6 @@
 import { createFlightEngine } from '../animation/flight-engine.js';
 import { getTheme } from '../themes.js';
+import { createRgbAtmosphere } from './rgb-atmosphere.js';
 
 function createCanvas(className) {
   const canvas = document.createElement('canvas');
@@ -42,6 +43,7 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
   const abortController = new AbortController();
   const { signal } = abortController;
   const reducedMotion = context.motion.reducedMotion;
+  const rgbAtmosphere = theme.id === 'rgb' ? createRgbAtmosphere(reducedMotion) : null;
   const flightEngine = createFlightEngine({
     layer: flightLayer,
     theme: theme.id,
@@ -53,6 +55,7 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
   let width = 1;
   let height = 1;
   let pixelRatio = 1;
+  let logoWidth = 1;
   let stars = [];
   let shootingStars = [];
   let rafId = 0;
@@ -87,6 +90,7 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
   function resize() {
     width = Math.max(1, window.innerWidth);
     height = Math.max(1, window.innerHeight);
+    logoWidth = context.logo.offsetWidth;
     pixelRatio = theme.starShape === 'pixel'
       ? 1
       : Math.min(window.devicePixelRatio || 1, context.quality.dprLimit);
@@ -97,61 +101,6 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
     const count = Math.max(160, Math.round(theme.starCount * scale));
     stars = Array.from({ length: count }, () => randomStar(theme, width, height));
     nebulaElapsed = Infinity;
-  }
-
-  function drawArcadeGrid() {
-    if (theme.id !== 'rgb') return;
-    const horizon = height * 0.64;
-    const floorHeight = height - horizon;
-    const vanishingX = width * 0.5 + Math.sin(elapsed * 0.22) * width * 0.018;
-    const rowCount = 13;
-    const rowPhase = reducedMotion ? 0 : (elapsed * 0.38) % 1;
-
-    background.save();
-    background.globalCompositeOperation = 'lighter';
-    background.lineCap = 'butt';
-
-    const horizonGlow = background.createLinearGradient(0, horizon, width, horizon);
-    horizonGlow.addColorStop(0, 'rgba(255,44,236,0)');
-    horizonGlow.addColorStop(0.28, 'rgba(255,44,236,0.18)');
-    horizonGlow.addColorStop(0.5, 'rgba(0,235,255,0.32)');
-    horizonGlow.addColorStop(0.72, 'rgba(255,44,236,0.18)');
-    horizonGlow.addColorStop(1, 'rgba(255,44,236,0)');
-    background.strokeStyle = horizonGlow;
-    background.lineWidth = 1.5;
-    background.beginPath();
-    background.moveTo(0, horizon);
-    background.lineTo(width, horizon);
-    background.stroke();
-
-    for (let index = 0; index <= rowCount; index += 1) {
-      const progress = (index + rowPhase) / rowCount;
-      if (progress > 1) continue;
-      const depth = progress ** 2.05;
-      const y = horizon + floorHeight * depth;
-      const alpha = 0.035 + depth * 0.13;
-      background.strokeStyle = index % 2
-        ? `rgba(0,235,255,${alpha})`
-        : `rgba(255,44,236,${alpha})`;
-      background.lineWidth = 0.6 + depth * 1.15;
-      background.beginPath();
-      background.moveTo(0, y);
-      background.lineTo(width, y);
-      background.stroke();
-    }
-
-    for (let index = -10; index <= 10; index += 1) {
-      const bottomX = vanishingX + index * width * 0.13;
-      background.strokeStyle = index % 2
-        ? 'rgba(0,235,255,0.09)'
-        : 'rgba(255,44,236,0.1)';
-      background.lineWidth = Math.abs(index) % 5 === 0 ? 1.2 : 0.7;
-      background.beginPath();
-      background.moveTo(vanishingX, horizon);
-      background.lineTo(bottomX, height);
-      background.stroke();
-    }
-    background.restore();
   }
 
   function drawNebula() {
@@ -179,7 +128,6 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
       background.fillStyle = gradient;
       background.fillRect(0, 0, width, height);
     });
-    drawArcadeGrid();
     background.restore();
   }
 
@@ -253,11 +201,30 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
     pointer.y += (pointer.targetY - pointer.y) * Math.min(1, delta * 4.8);
     const px = pointer.x + automaticX;
     const py = pointer.y + automaticY;
+    rgbAtmosphere?.draw(foreground, { width, height, elapsed, delta, pointer, logoWidth });
     for (const star of stars) {
       let x = star.x - px * star.depth * 0.055;
       let y = star.y - py * star.depth * 0.055;
-      const opacity = Math.max(0.12, star.opacity + Math.sin(elapsed * star.speed + star.phase) * 0.14);
-      const size = star.size * (0.62 + star.depth * 0.55);
+      let opacity = Math.max(0.12, star.opacity + Math.sin(elapsed * star.speed + star.phase) * 0.14);
+      let size = star.size * (0.62 + star.depth * 0.55);
+      let visibility = 1;
+      if (rgbAtmosphere && !reducedMotion) {
+        const depth = (star.depth + rgbAtmosphere.travel * 0.055) % 1;
+        const projection = 0.25 + 0.55 / (1.2 - depth);
+        x = width / 2 + (star.x - width / 2) * projection - px * depth * 0.055;
+        y = height / 2 + (star.y - height / 2) * projection - py * depth * 0.055;
+        visibility = Math.min(1, depth / 0.06, (1 - depth) / 0.09);
+        opacity *= visibility;
+        size *= Math.min(1.5, projection);
+        if (star.flare && depth > 0.65) {
+          foreground.strokeStyle = `rgba(${star.color},${opacity * 0.32})`;
+          foreground.lineWidth = 1;
+          foreground.beginPath();
+          foreground.moveTo(x, y);
+          foreground.lineTo(x - (x - width / 2) * depth * 0.045, y - (y - height / 2) * depth * 0.045);
+          foreground.stroke();
+        }
+      }
       foreground.fillStyle = `rgba(${star.color},${opacity})`;
       if (theme.starShape === 'pixel') {
         x = Math.round(x / 2) * 2;
@@ -265,7 +232,7 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
         const pixelSize = Math.max(1, Math.round(size));
         foreground.fillRect(x, y, pixelSize, pixelSize);
         if (star.flare) {
-          const flare = Math.max(0, (Math.sin(elapsed * star.speed * 1.7 + star.phase) - 0.68) / 0.32);
+          const flare = Math.max(0, (Math.sin(elapsed * star.speed * 1.7 + star.phase) - 0.68) / 0.32) * visibility;
           if (flare > 0) {
             const reach = Math.max(2, Math.round(pixelSize * (2 + flare * 2)));
             foreground.fillStyle = `rgba(255,44,236,${flare * 0.2})`;
@@ -351,6 +318,7 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
     pointer.targetY = 0;
   }, { signal });
   document.addEventListener('visibilitychange', onVisibilityChange, { signal });
+  if (rgbAtmosphere) context.logo.addEventListener('click', rgbAtmosphere.pulse, { signal });
   rafId = requestAnimationFrame(renderFrame);
   await firstFrame;
 
@@ -372,6 +340,7 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
         reducedMotion,
         starCount: stars.length,
         shootingStarCount: shootingStars.length,
+        ...(rgbAtmosphere ? { atmosphere: rgbAtmosphere.getDiagnostics() } : {}),
         flight: flightEngine.getDiagnostics(),
       };
     },

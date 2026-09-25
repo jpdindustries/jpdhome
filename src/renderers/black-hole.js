@@ -497,10 +497,18 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
           * radialEnergy
           * (orbitPulse * 0.58 + orbitArc * 0.3)
           * (0.24 + fineCloud * 0.54);
-        vec2 speckPoint = rotate2d(flowTime * 0.3) * flattenedDisk;
-        vec2 speckUv = speckPoint * minDimension * 0.29
-          + vec2(flowTime * 19.0, -flowTime * 5.0);
-        float specks = smoothstep(0.9945, 0.9994, hash(floor(speckUv)))
+        // Stable orbital lanes give the dust a direction and a short wake,
+        // without reseeding bright pixels on every frame.
+        float dustLane = floor(diskNorm * 24.0);
+        float dustSeed = hash(vec2(dustLane, 17.0));
+        float dustPhase = fract(
+          orbitAngle / 6.2831853 + dustSeed
+            - flowTime * (0.045 + dustSeed * 0.055)
+        );
+        float dustTail = exp(-dustPhase * 75.0) * smoothstep(0.0, 0.012, dustPhase);
+        float specks = dustTail
+          * pow(max(0.0, sin(fract(diskNorm * 24.0) * 3.14159265)), 12.0)
+          * step(0.28, dustSeed)
           * smoothstep(0.1, 0.28, diskNorm)
           * (1.0 - smoothstep(0.76, 1.0, diskNorm))
           * diskWindow
@@ -525,6 +533,28 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
         flowHighlight *= diskVisibility;
         specks *= diskVisibility;
 
+        // The far side of the disk appears above the shadow through lensing;
+        // a fainter returning image curls underneath it. Both grow with the disk.
+        vec2 lensedPoint = vec2(diskPoint.x * 0.9, diskPoint.y * 0.79);
+        float lensedRadius = length(lensedPoint);
+        float lensedAngle = atan(lensedPoint.y, lensedPoint.x);
+        float arcFlow = 0.68 + 0.18 * sin(lensedAngle * 4.0 - flowTime * 0.65)
+          + 0.14 * sin(lensedAngle * 9.0 + flowTime * 0.38 + lensNoise * 3.0);
+        float backArc = softBand(
+          lensedRadius,
+          coreRadius * (1.11 + (lensNoise - 0.5) * 0.025),
+          coreRadius * 0.012,
+          coreRadius * 0.085
+        ) * smoothstep(-0.04, 0.4, diskPoint.y / coreRadius);
+        float returnArc = softBand(
+          length(vec2(diskPoint.x * 0.94, diskPoint.y * 0.91)),
+          coreRadius * 1.1,
+          coreRadius * 0.004,
+          coreRadius * 0.026
+        ) * (1.0 - smoothstep(-0.3, 0.02, diskPoint.y / coreRadius));
+        float lensedLight = (backArc * 0.4 + returnArc * 0.13)
+          * arcFlow * uDiskReveal * (1.0 - interiorMask);
+
         vec3 diskColor = mix(
           vec3(1.0, 0.32, 0.075),
           vec3(1.0, 0.62, 0.22),
@@ -544,6 +574,7 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
           * 0.34
           * uDiskReveal;
         color += specks * vec3(1.0, 0.68, 0.3) * 0.55 * uDiskReveal;
+        color += lensedLight * vec3(1.0, 0.58, 0.24);
         color += vec3(1.0, 0.88, 0.58)
           * max(photonRing, photonFromPass * 0.35)
           * 1.04
@@ -582,6 +613,7 @@ function createCompositeMaterial(sceneTexture, distortionTexture, reducedMotion)
             + photonGlow * 0.42 * uRimReveal
             + cloud * 0.82 * uDiskReveal
             + specks * 0.8 * uDiskReveal
+            + lensedLight * 0.6
             + lensHalo * 0.38 * uLensReveal
             + outerGather * 0.12 * uGatherReveal,
           0.0,
