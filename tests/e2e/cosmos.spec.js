@@ -32,7 +32,8 @@ test('RGB orbits advance, pause with the tab, and keep logo pulses bounded', asy
     Object.defineProperty(document, 'hidden', { configurable: true, value: false });
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  await page.clock.runFor(3_200);
+  // Exercise expiry at 20 fps without queuing hundreds of software GPU frames.
+  for (let frame = 0; frame < 64; frame += 1) await page.clock.fastForward(50);
   expect((await atmosphere()).travel).toBeGreaterThan(paused.travel);
   expect((await atmosphere()).pulseCount).toBe(0);
   await page.setViewportSize({ width: 390, height: 844 });

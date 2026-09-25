@@ -4,6 +4,8 @@ const swiftShaderArgs = [
   '--use-gl=angle',
   '--use-angle=swiftshader',
   '--enable-unsafe-swiftshader',
+  // Keep Canvas 2D on the CPU; SwiftShader is only needed for the WebGL scene.
+  '--disable-accelerated-2d-canvas',
 ];
 
 export default defineConfig({
