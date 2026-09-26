@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { isChromiumDesktop, waitForScene } from './helpers.js';
+import { isChromiumDesktop, seedScene, waitForScene } from './helpers.js';
 
 function angleDifference(first, second) {
   return Math.atan2(Math.sin(first - second), Math.cos(first - second));
@@ -39,19 +39,33 @@ for (const theme of ['base', 'retro', 'rgb']) {
 for (const [theme, trail] of [['base', 'neutral'], ['rgb', 'rainbow']]) {
   test(`${theme} automatically shows an onscreen object with its ${trail} trail`, async ({ page }, testInfo) => {
     test.skip(!isChromiumDesktop(testInfo.project.name));
+    test.setTimeout(60_000);
+    await seedScene(page);
+    await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+    await page.clock.pauseAt(new Date('2026-01-01T00:01:00Z'));
     await page.goto(`/?v=${theme}`);
+    // The renderer becomes ready after its first animation frame.
+    await expect(page.locator('.scene-canvas')).toHaveCount(2);
+    await page.clock.fastForward(50);
     await waitForScene(page);
 
-    await expect.poll(async () => {
-      const diagnostics = await page.evaluate(
-        () => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics(),
-      );
-      return diagnostics.flight.active?.visible || false;
-    }, { timeout: 7_000 }).toBe(true);
-
-    const diagnostics = await page.evaluate(
+    let diagnostics = await page.evaluate(
       () => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics(),
     );
+    expect(diagnostics.flight.active).toBeNull();
+    expect(diagnostics.flight.untilNext).toBeGreaterThan(0);
+
+    // Exercise the default automatic schedule within seven animation seconds.
+    // Canvas caps each frame at 50 ms, so wall time on a busy software renderer
+    // does not measure animation time. Advance one frame per 50 ms clock step.
+    for (let elapsed = 50; elapsed < 7_000 && !diagnostics.flight.active?.visible; elapsed += 50) {
+      await page.clock.fastForward(50);
+      diagnostics = await page.evaluate(
+        () => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics(),
+      );
+    }
+
+    expect(diagnostics.flight.active?.visible).toBe(true);
     expect(diagnostics.flight.active.trail).toBe(trail);
     expect(diagnostics.flight.particleCounts[trail]).toBeGreaterThan(0);
     await expect(page.locator('.flight-object')).toHaveCount(1);
