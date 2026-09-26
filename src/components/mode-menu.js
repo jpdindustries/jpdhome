@@ -6,7 +6,7 @@ import {
 } from '../core/modes.js';
 import { STAR_MAX, STAR_MIN, changeStarCount } from '../core/stars.js';
 
-export function createModeMenu({ requestedMode, navigate } = {}) {
+export function createModeMenu({ requestedMode, navigate, deviceTilt } = {}) {
   const abortController = new AbortController();
   const { signal } = abortController;
   const root = document.createElement('div');
@@ -46,6 +46,33 @@ export function createModeMenu({ requestedMode, navigate } = {}) {
     modeButtons.set(mode, button);
     panel.append(button);
   });
+
+  if (deviceTilt?.supported) {
+    const tiltButton = document.createElement('button');
+    tiltButton.type = 'button';
+    tiltButton.className = 'mode-button tilt-button';
+    tiltButton.setAttribute('aria-live', 'polite');
+    let permissionDenied = false;
+    function updateTiltButton() {
+      tiltButton.textContent = deviceTilt.enabled ? 'Tilt on' : permissionDenied ? 'Tilt blocked' : 'Tilt off';
+      tiltButton.setAttribute('aria-label', deviceTilt.enabled
+        ? 'Disable tilt motion'
+        : permissionDenied ? 'Retry tilt motion permission' : 'Enable tilt motion');
+      tiltButton.setAttribute('aria-pressed', String(deviceTilt.enabled));
+    }
+    tiltButton.addEventListener('click', async () => {
+      if (deviceTilt.enabled) {
+        deviceTilt.disable();
+        permissionDenied = false;
+      } else {
+        permissionDenied = !await deviceTilt.enable();
+        tiltButton.title = permissionDenied ? 'Allow motion in browser settings, then tap to retry' : '';
+      }
+      updateTiltButton();
+    }, { signal });
+    updateTiltButton();
+    panel.append(tiltButton);
+  }
 
   const starControls = document.createElement('div');
   starControls.className = 'star-controls';

@@ -8,6 +8,7 @@ import {
 } from './core/fallback-machine.js';
 import { parseRequestedMode } from './core/modes.js';
 import { getRuntimePreferences } from './core/quality.js';
+import { createDeviceTilt } from './core/device-tilt.js';
 
 const documentRoot = document.documentElement;
 const sceneContainer = document.getElementById('scene');
@@ -15,8 +16,12 @@ const logoTrigger = document.getElementById('logo-trigger');
 const loader = document.getElementById('scene-loader');
 const requestedMode = parseRequestedMode(window.location.search);
 const preferences = getRuntimePreferences(window);
+const deviceTilt = createDeviceTilt({
+  coarsePointer: preferences.coarsePointer,
+  reducedMotion: preferences.motion.reducedMotion,
+});
 const assetBase = new URL('assets/', document.baseURI);
-const menu = createModeMenu({ requestedMode });
+const menu = createModeMenu({ requestedMode, deviceTilt });
 let state = createRendererState(requestedMode);
 let activeController = null;
 let activeRenderer = '';
@@ -55,6 +60,8 @@ function createContext(renderer) {
     assetBase,
     quality: preferences.quality,
     motion: preferences.motion,
+    coarsePointer: preferences.coarsePointer,
+    deviceTilt,
     onRecovering(at) {
       if (renderer !== 'webgl' || disposed) return;
       state = transitionRendererState(state, { type: 'CONTEXT_LOST', at });
@@ -196,6 +203,7 @@ window.addEventListener('pagehide', () => {
   disposed = true;
   activeController?.dispose();
   menu.dispose();
+  deviceTilt.dispose();
 }, { once: true });
 
 void boot();

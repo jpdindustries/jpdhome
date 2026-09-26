@@ -78,6 +78,7 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
     targetX: 0,
     targetY: 0,
   };
+  const mouseTarget = { x: 0, y: 0 };
 
   function configureCanvas(canvas, renderingContext) {
     canvas.width = Math.max(1, Math.round(width * pixelRatio));
@@ -197,6 +198,9 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
     foreground.clearRect(0, 0, width, height);
     const automaticX = reducedMotion ? 0 : Math.sin(elapsed * 0.105) * 42;
     const automaticY = reducedMotion ? 0 : Math.sin(elapsed * 0.14) * 32;
+    const tilt = context.deviceTilt.getInput();
+    pointer.targetX = tilt.active ? tilt.x : mouseTarget.x;
+    pointer.targetY = tilt.active ? tilt.y : mouseTarget.y;
     pointer.x += (pointer.targetX - pointer.x) * Math.min(1, delta * 4.8);
     pointer.y += (pointer.targetY - pointer.y) * Math.min(1, delta * 4.8);
     const px = pointer.x + automaticX;
@@ -253,8 +257,8 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
     updateAndDrawShootingStars(delta);
   }
 
-  function updateLogo(delta) {
-    if (!context.motion.pointerParallax) {
+  function updateLogo() {
+    if (context.coarsePointer || !context.motion.pointerParallax) {
       context.logo.style.transform = 'translate(-50%, -50%)';
       return;
     }
@@ -280,7 +284,7 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
       drawStars(delta);
       flightEngine.update(delta, elapsed);
       flightEngine.drawParticles(foreground);
-      updateLogo(delta);
+      updateLogo();
       firstFrameResolve?.();
       firstFrameResolve = null;
       firstFrameReject = null;
@@ -295,8 +299,8 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
 
   function onPointerMove(event) {
     if (!context.motion.pointerParallax || (event.pointerType !== 'mouse' && event.pointerType !== 'pen')) return;
-    pointer.targetX = event.clientX - width / 2;
-    pointer.targetY = event.clientY - height / 2;
+    mouseTarget.x = event.clientX - width / 2;
+    mouseTarget.y = event.clientY - height / 2;
   }
 
   function onVisibilityChange() {
@@ -314,8 +318,8 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
   window.addEventListener('resize', resize, { signal });
   document.addEventListener('pointermove', onPointerMove, { signal });
   document.addEventListener('pointerleave', () => {
-    pointer.targetX = 0;
-    pointer.targetY = 0;
+    mouseTarget.x = 0;
+    mouseTarget.y = 0;
   }, { signal });
   document.addEventListener('visibilitychange', onVisibilityChange, { signal });
   if (rgbAtmosphere) context.logo.addEventListener('click', rgbAtmosphere.pulse, { signal });
@@ -340,6 +344,7 @@ export async function mountCanvasRenderer(context, themeId = 'base') {
         reducedMotion,
         starCount: stars.length,
         shootingStarCount: shootingStars.length,
+        parallaxTarget: { x: pointer.targetX, y: pointer.targetY },
         ...(rgbAtmosphere ? { atmosphere: rgbAtmosphere.getDiagnostics() } : {}),
         flight: flightEngine.getDiagnostics(),
       };

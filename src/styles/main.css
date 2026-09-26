@@ -315,6 +315,11 @@ button {
   color: #fff;
 }
 
+.tilt-button {
+  margin-left: 3px;
+  border-left-color: rgb(255 21 79 / 42%);
+}
+
 .star-controls {
   display: flex;
   min-height: 22px;
