@@ -114,7 +114,11 @@ test('WebGL starts idle flight immediately and eases into pointer parallax', asy
   expect(entering.interactionBlend).toBeLessThan(0.65);
   expect(Math.abs(entering.flightIntensity - initial.flightIntensity)).toBeLessThan(0.16);
 
+  let pointerSample = 0;
   await expect.poll(async () => {
+    // Keep the pointer active while measuring its response, including on a
+    // software GPU where the short idle timeout can span only a few frames.
+    await page.mouse.move(1120 + (pointerSample++ % 2), 120);
     const diagnostics = await page.evaluate(() => window.__JPD_DIAGNOSTICS__.getRendererDiagnostics());
     return diagnostics.interactionBlend;
   }).toBeGreaterThan(0.55);

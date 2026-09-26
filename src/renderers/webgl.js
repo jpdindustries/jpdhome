@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { distributeStarCount, clampStarCount } from '../core/stars.js';
+import { createNebulaTexture } from './nebula.js';
 import {
   createBlackHolePass as createBlackHoleCompositor,
   disposeBlackHolePass,
@@ -195,6 +196,7 @@ export async function mount(context) {
         varying float vAngle;
         varying float vPointSize;
         varying float vNearness;
+        varying float vDepthFade;
 
         void main() {
           float moved = position.z - uFarZ + uFlightDistance * uLayerSpeed;
@@ -215,6 +217,9 @@ export async function mount(context) {
           vAngle = atan(mvPosition.y, mvPosition.x);
           vPointSize = pointSize;
           vNearness = nearness;
+          float depthProgress = (wrappedZ - uFarZ) / uDepthSpan;
+          vDepthFade = smoothstep(0.0, 0.035, depthProgress)
+            * (1.0 - smoothstep(0.97, 1.0, depthProgress));
         }
       `,
       fragmentShader: `
@@ -226,6 +231,7 @@ export async function mount(context) {
         varying float vAngle;
         varying float vPointSize;
         varying float vNearness;
+        varying float vDepthFade;
 
         mat2 rotate2d(float angle) {
           float sine = sin(angle);
@@ -265,7 +271,7 @@ export async function mount(context) {
           float twinkle = 0.78
             + 0.15 * sin(uTime * (1.3 + vRandom * 2.2) + vRandom * 19.7)
             + 0.06 * sin(uTime * (3.4 + vRandom) + vRandom * 7.1);
-          float alpha = max(core * twinkle, streak * 0.55);
+          float alpha = max(core * twinkle, streak * 0.55) * vDepthFade;
           if (alpha < 0.005) discard;
           gl_FragColor = vec4(vColor, clamp(alpha, 0.0, 1.0));
         }
@@ -300,26 +306,10 @@ export async function mount(context) {
     }
   }
 
-  function createNebulaTexture(color) {
-    const textureCanvas = document.createElement('canvas');
-    textureCanvas.width = 256;
-    textureCanvas.height = 256;
-    const textureContext = textureCanvas.getContext('2d');
-    const gradient = textureContext.createRadialGradient(128, 128, 0, 128, 128, 128);
-    gradient.addColorStop(0, `rgba(${color},0.1)`);
-    gradient.addColorStop(0.48, `rgba(${color},0.035)`);
-    gradient.addColorStop(1, `rgba(${color},0)`);
-    textureContext.fillStyle = gradient;
-    textureContext.fillRect(0, 0, 256, 256);
-    const texture = new THREE.CanvasTexture(textureCanvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    return texture;
-  }
-
   function createNebula() {
     const colors = ['184,28,88', '22,122,148', '88,44,178', '184,76,28'];
     for (let index = 0; index < context.quality.nebulaCount; index += 1) {
-      const texture = createNebulaTexture(colors[index % colors.length]);
+      const texture = createNebulaTexture(colors[index % colors.length], index);
       const material = new THREE.SpriteMaterial({
         map: texture,
         color: 0xffffff,
@@ -336,8 +326,11 @@ export async function mount(context) {
         THREE.MathUtils.randFloatSpread(1200),
         -900 - index * 210,
       );
-      const scale = THREE.MathUtils.randFloat(900, 1600);
-      sprite.scale.set(scale, scale, 1);
+      const scale = THREE.MathUtils.randFloat(1600, 2400);
+      sprite.scale.set(scale * 1.4, scale, 1);
+      sprite.userData.scale = scale;
+      sprite.userData.opacity = material.opacity;
+      sprite.material.rotation = index * 0.73;
       sprite.userData.base = sprite.position.clone();
       sprite.userData.phase = Math.random() * Math.PI * 2;
       sprite.userData.parallax = 0.015 + index * 0.004;
@@ -507,10 +500,18 @@ export async function mount(context) {
     });
     nebulaSprites.forEach((sprite) => {
       const phase = sprite.userData.phase;
+      const driftTime = context.motion.reducedMotion ? 0 : elapsed;
+      const breath = Math.sin(driftTime * 0.12 + phase);
       sprite.position.x = sprite.userData.base.x - pointerX * sprite.userData.parallax
-        + (context.motion.reducedMotion ? 0 : Math.sin(elapsed * 0.04 + phase) * 16);
+        + Math.sin(driftTime * 0.045 + phase) * 28;
       sprite.position.y = sprite.userData.base.y + pointerY * sprite.userData.parallax
-        + (context.motion.reducedMotion ? 0 : Math.cos(elapsed * 0.035 + phase) * 12);
+        + Math.cos(driftTime * 0.035 + phase) * 22;
+      sprite.scale.set(
+        sprite.userData.scale * (1.4 + breath * 0.045),
+        sprite.userData.scale * (1 - breath * 0.025),
+        1,
+      );
+      sprite.material.opacity = sprite.userData.opacity * (0.88 + breath * 0.12);
     });
     const logoX = -pointerX * (context.quality.name === 'compact' ? 0.026 : 0.048);
     const logoY = -pointerY * (context.quality.name === 'compact' ? 0.026 : 0.048);

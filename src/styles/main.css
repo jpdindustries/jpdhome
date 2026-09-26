@@ -417,7 +417,7 @@ button {
 }
 
 [data-renderer="rgb"][data-scene-status="ready"] #logo {
-  animation: rgb-logo-pulse 2.8s steps(5, end) infinite;
+  animation: rgb-logo-pulse 12s linear infinite;
 }
 
 [data-renderer="rgb"] .scene-canvas,
@@ -453,9 +453,10 @@ button {
 }
 
 @keyframes rgb-logo-pulse {
-  0%, 100% {
+  0% {
     transform: translateZ(0) scale(1);
     filter:
+      hue-rotate(0deg)
       drop-shadow(0 0 8px rgb(255 23 79 / 95%))
       drop-shadow(0 0 18px rgb(0 255 240 / 65%))
       drop-shadow(0 0 28px rgb(255 44 236 / 55%));
@@ -463,6 +464,7 @@ button {
   33% {
     transform: translateZ(0) scale(1.014);
     filter:
+      hue-rotate(120deg)
       drop-shadow(0 0 10px rgb(0 255 240 / 95%))
       drop-shadow(0 0 22px rgb(255 245 0 / 62%))
       drop-shadow(0 0 32px rgb(255 44 236 / 52%));
@@ -470,9 +472,18 @@ button {
   66% {
     transform: translateZ(0) scale(0.998);
     filter:
+      hue-rotate(240deg)
       drop-shadow(0 0 12px rgb(255 44 236 / 90%))
       drop-shadow(0 0 24px rgb(40 255 84 / 54%))
       drop-shadow(0 0 34px rgb(84 82 255 / 48%));
+  }
+  100% {
+    transform: translateZ(0) scale(1);
+    filter:
+      hue-rotate(360deg)
+      drop-shadow(0 0 8px rgb(255 23 79 / 95%))
+      drop-shadow(0 0 18px rgb(0 255 240 / 65%))
+      drop-shadow(0 0 28px rgb(255 44 236 / 55%));
   }
 }
 
