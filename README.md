@@ -17,6 +17,8 @@ A space-themed, WebGL-first landing page with a Canvas fallback and no runtime C
 
 Invalid `v` values normalize to Auto. Reduced-motion users receive an ambient scene without parallax, forward flight, flybys, or celestial events.
 
+On supported mobile devices, tilting the phone moves the scene while the logo stays centered. Tilt starts automatically when the browser allows sensor access; on iOS, open the display controls and tap **Tilt off** to grant motion access. The same control can turn tilt off again.
+
 ## Development
 
 Node 24 is pinned in `.nvmrc`.

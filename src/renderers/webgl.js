@@ -75,6 +75,7 @@ export async function mount(context) {
   const celestialEvents = [];
   const pointerTarget = new THREE.Vector2();
   const pointerCurrent = new THREE.Vector2();
+  const mouseTarget = new THREE.Vector2();
   const blackHole = createBlackHoleCompositor(context.motion.reducedMotion);
   const baseWeights = [...context.quality.starCounts];
   let currentStarCount = baseWeights.reduce((sum, count) => sum + count, 0);
@@ -90,6 +91,7 @@ export async function mount(context) {
   let simulatedRestoreTimeout = 0;
   let lastContextLossAt = null;
   let pointerActiveUntil = 0;
+  let mouseActiveUntil = 0;
   let interactionBlend = 0;
   let flightIntensity = context.motion.automaticFlight ? IDLE_FLIGHT_INTENSITY : 0;
   let flightDistance = 0;
@@ -481,6 +483,13 @@ export async function mount(context) {
 
   function updateScene(delta, now) {
     elapsed += delta;
+    const tilt = context.deviceTilt.getInput();
+    pointerTarget.set(
+      blackHole.active ? 0 : tilt.active ? tilt.x : mouseTarget.x,
+      blackHole.active ? 0 : tilt.active ? tilt.y : mouseTarget.y,
+    );
+    pointerActiveUntil = blackHole.active ? 0 : tilt.active
+      ? now + POINTER_ACTIVITY_HOLD_MS : mouseActiveUntil;
     pointerCurrent.x = damp(pointerCurrent.x, pointerTarget.x, 5.5, delta);
     pointerCurrent.y = damp(pointerCurrent.y, pointerTarget.y, 5.5, delta);
 
@@ -534,9 +543,13 @@ export async function mount(context) {
       );
       sprite.material.opacity = sprite.userData.opacity * (0.88 + breath * 0.12);
     });
-    const logoX = -pointerX * (context.quality.name === 'compact' ? 0.026 : 0.048);
-    const logoY = -pointerY * (context.quality.name === 'compact' ? 0.026 : 0.048);
-    context.logo.style.transform = `translate(calc(-50% + ${logoX.toFixed(2)}px), calc(-50% + ${logoY.toFixed(2)}px))`;
+    if (context.coarsePointer) {
+      context.logo.style.transform = 'translate(-50%, -50%)';
+    } else {
+      const logoX = -pointerX * (context.quality.name === 'compact' ? 0.026 : 0.048);
+      const logoY = -pointerY * (context.quality.name === 'compact' ? 0.026 : 0.048);
+      context.logo.style.transform = `translate(calc(-50% + ${logoX.toFixed(2)}px), calc(-50% + ${logoY.toFixed(2)}px))`;
+    }
     updateCelestialEvents(delta);
     updateBlackHole(delta);
   }
@@ -635,13 +648,13 @@ export async function mount(context) {
       || !context.motion.pointerParallax
       || (event.pointerType !== 'mouse' && event.pointerType !== 'pen')
     ) return;
-    pointerTarget.set(event.clientX - window.innerWidth / 2, event.clientY - window.innerHeight / 2);
-    pointerActiveUntil = performance.now() + POINTER_ACTIVITY_HOLD_MS;
+    mouseTarget.set(event.clientX - window.innerWidth / 2, event.clientY - window.innerHeight / 2);
+    mouseActiveUntil = performance.now() + POINTER_ACTIVITY_HOLD_MS;
   }
 
   function resetPointer() {
-    pointerTarget.set(0, 0);
-    pointerActiveUntil = 0;
+    mouseTarget.set(0, 0);
+    mouseActiveUntil = 0;
   }
 
   function onVisibilityChange() {
@@ -784,6 +797,7 @@ export async function mount(context) {
         flightIntensity,
         flightDistance,
         interactionBlend,
+        parallaxTarget: { x: pointerTarget.x, y: pointerTarget.y },
         blackHoleActive: blackHole.active,
         blackHoleProgress: blackHole.progress,
         blackHoleEntry: { ...blackHole.entry },
