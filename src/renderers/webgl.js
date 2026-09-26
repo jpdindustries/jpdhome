@@ -19,6 +19,10 @@ const STAR_LAYER_SHAPES = Object.freeze([
 const IDLE_FLIGHT_INTENSITY = 0.82;
 const POINTER_FLIGHT_INTENSITY = 0.26;
 const POINTER_ACTIVITY_HOLD_MS = 1100;
+const NEBULA_ANCHORS = [
+  [0.14, 0.24], [0.83, 0.72], [0.18, 0.8],
+  [0.85, 0.18], [0.48, 0.4], [0.58, 0.9],
+];
 
 function webglError(reason, message, cause) {
   const error = new Error(message, cause ? { cause } : undefined);
@@ -321,14 +325,13 @@ export async function mount(context) {
       });
       material.toneMapped = false;
       const sprite = new THREE.Sprite(material);
-      sprite.position.set(
-        THREE.MathUtils.randFloatSpread(1700),
-        THREE.MathUtils.randFloatSpread(1200),
-        -900 - index * 210,
+      const [anchorX, anchorY] = NEBULA_ANCHORS[index % NEBULA_ANCHORS.length];
+      sprite.position.z = -900 - index * 210;
+      sprite.userData.anchor = new THREE.Vector2(
+        anchorX + THREE.MathUtils.randFloatSpread(0.06),
+        anchorY + THREE.MathUtils.randFloatSpread(0.06),
       );
-      const scale = THREE.MathUtils.randFloat(1600, 2400);
-      sprite.scale.set(scale * 1.4, scale, 1);
-      sprite.userData.scale = scale;
+      sprite.userData.size = THREE.MathUtils.randFloat(0.9, 1.1);
       sprite.userData.opacity = material.opacity;
       sprite.material.rotation = index * 0.73;
       sprite.userData.base = sprite.position.clone();
@@ -337,6 +340,24 @@ export async function mount(context) {
       nebulaSprites.push(sprite);
       scene.add(sprite);
     }
+    layoutNebula();
+  }
+
+  function layoutNebula() {
+    // Fit each cloud to the camera's visible area at its own depth. Anchors
+    // reach the outer sky on wide displays and stay consistent after resizing.
+    const heightPerDepth = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    nebulaSprites.forEach((sprite) => {
+      const viewHeight = heightPerDepth * (camera.position.z - sprite.position.z);
+      const viewWidth = viewHeight * camera.aspect;
+      const { anchor, size, base } = sprite.userData;
+      base.set((anchor.x - 0.5) * viewWidth, (0.5 - anchor.y) * viewHeight, sprite.position.z);
+      sprite.position.copy(base);
+      // Keep cloud proportions while covering both tall and ultrawide screens.
+      const scale = Math.max(viewHeight * 0.9, viewWidth * 0.58 / 1.4) * size;
+      sprite.userData.scale = scale;
+      sprite.scale.set(scale * 1.4, scale, 1);
+    });
   }
 
   function createCelestialOverlay() {
@@ -599,6 +620,7 @@ export async function mount(context) {
     try {
       camera.aspect = window.innerWidth / Math.max(window.innerHeight, 1);
       camera.updateProjectionMatrix();
+      layoutNebula();
       renderer.setSize(window.innerWidth, window.innerHeight, false);
       resizeCelestialOverlay();
       resizeBlackHole();
@@ -789,6 +811,18 @@ export async function mount(context) {
           height: blackHole.distortionTarget.height,
         },
         drawingBufferSize: { width: drawingBufferSize.x, height: drawingBufferSize.y },
+        // Centers and sizes as fractions of the viewport, for layout checks.
+        nebulaClouds: nebulaSprites.map((sprite) => {
+          const center = sprite.position.clone().project(camera);
+          const viewHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))
+            * (camera.position.z - sprite.position.z);
+          return {
+            x: (center.x + 1) / 2,
+            y: (1 - center.y) / 2,
+            width: sprite.scale.x / (viewHeight * camera.aspect),
+            height: sprite.scale.y / viewHeight,
+          };
+        }),
         nebulaMaxOpacity: Math.max(0, ...nebulaSprites.map((sprite) => sprite.material.opacity)),
         nebulaUsesNormalBlending: nebulaSprites.every(
           (sprite) => sprite.material.blending === THREE.NormalBlending,

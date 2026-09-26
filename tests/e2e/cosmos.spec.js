@@ -1,5 +1,61 @@
 import { test, expect } from '@playwright/test';
-import { waitForScene } from './helpers.js';
+import { isChromiumDesktop, seedScene, waitForScene } from './helpers.js';
+
+test('RGB keeps the logo colors throughout its animation', async ({ page }, testInfo) => {
+  test.skip(!isChromiumDesktop(testInfo.project.name));
+  await page.goto('/?v=rgb');
+  await waitForScene(page);
+  const filters = await page.locator('#logo').evaluate((logo) => {
+    const animations = logo.getAnimations();
+    animations.forEach((animation) => animation.pause());
+    return Array.from({ length: 13 }, (_, second) => {
+      animations.forEach((animation) => { animation.currentTime = second * 1000; });
+      return getComputedStyle(logo).filter;
+    });
+  });
+  // Colored shadows may animate around the image; its pixels must not be recolored.
+  for (const filter of filters) {
+    expect(filter).not.toMatch(/hue-rotate|saturate|grayscale|sepia|invert|brightness|contrast/);
+  }
+});
+
+test('WebGL nebula reaches the outer sky on large screens and after resizing', async ({ page }, testInfo) => {
+  test.skip(!isChromiumDesktop(testInfo.project.name));
+  test.setTimeout(60_000);
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await seedScene(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto('/?v=webgl');
+  await waitForScene(page);
+
+  for (const viewport of [
+    { width: 1920, height: 1080 },
+    { width: 3440, height: 1440 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect.poll(() => page.evaluate(() => (
+      window.__JPD_DIAGNOSTICS__.getRendererDiagnostics().drawingBufferSize
+    ))).toEqual(viewport);
+    const { nebulaClouds: clouds } = await page.evaluate(() => (
+      window.__JPD_DIAGNOSTICS__.getRendererDiagnostics()
+    ));
+    // Cloud centers should occupy all four outer regions, with broad coverage.
+    for (const left of [true, false]) {
+      for (const top of [true, false]) {
+        expect(clouds.some((cloud) => (
+          (left ? cloud.x < 0.3 : cloud.x > 0.7)
+          && (top ? cloud.y < 0.3 : cloud.y > 0.7)
+          && cloud.width > 0.45 && cloud.height > 0.65
+        ))).toBe(true);
+      }
+    }
+    await expect(page.locator('html')).toHaveAttribute('data-renderer', 'webgl');
+  }
+  expect(errors).toEqual([]);
+});
 
 test('RGB orbits advance, pause with the tab, and keep logo pulses bounded', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'reduced-motion');
